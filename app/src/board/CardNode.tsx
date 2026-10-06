@@ -3,6 +3,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { NODE_TYPES } from '../config';
 import { useBoardContext } from './BoardContext';
 import { readAndResizeImage } from '../lib/image';
+import { CardTypeSelect } from './CardTypeSelect';
 import type { CardNode as CardNodeType } from '../state/useBoardState';
 import './CardNode.css';
 
@@ -79,7 +80,15 @@ function CardNodeComponent({ id, data, dragging, selected }: NodeProps<CardNodeT
       <Handle type="target" position={Position.Left} isConnectable={false} style={{ visibility: 'hidden' }} />
       <Handle type="source" position={Position.Right} isConnectable={false} style={{ visibility: 'hidden' }} />
       <div className="card-node__bar">
-        <span className="card-node__badge">{cfg.short}</span>
+        <span className="card-node__badge-wrap">
+          <span className="card-node__badge">
+            {cfg.short}
+            <span className="card-node__badge-caret" aria-hidden>
+              ▾
+            </span>
+          </span>
+          <CardTypeSelect value={data.nodeType} onChange={(nodeType) => updateCard(id, { nodeType })} />
+        </span>
         <div className="card-node__bar-actions">
           <button
             type="button"
@@ -157,6 +166,11 @@ function CardNodeComponent({ id, data, dragging, selected }: NodeProps<CardNodeT
           }}
         />
         {isGap && <div className="card-node__gap-tag">⚠ no evidence trail yet</div>}
+        {data.source && (
+          <div className="card-node__source" title={`From "${data.source.docName}":\n“${data.source.quote}”`}>
+            ▤ {data.source.docName}
+          </div>
+        )}
       </div>
       <button
         type="button"

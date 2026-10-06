@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { NODE_TYPES } from '../config';
-import { askAi, fetchAiStatus, type AiMode, type AiStatus, type AiTurn } from '../ai/client';
-import { describeBoard, describeBrief } from '../ai/boardContext';
+import { askAi, fetchAiStatus, type AiStatus, type AiTurn } from '../ai/client';
+import { describeBoard, describeBrief, describeSources } from '../ai/boardContext';
+import { useAiMode } from '../ai/mode';
 import { CHAT_SYSTEM_PROMPT } from '../ai/prompts';
 import { stripMarkdown } from '../ai/plainText';
+import { ModelPicker } from './ModelPicker';
 import type { BoardState, CardNode } from '../state/useBoardState';
 import './ChatPanel.css';
 
-const MODE_STORAGE_KEY = 'corkline-ai-mode';
 /** How many earlier chat turns are sent along, so follow-up questions make sense. */
 const HISTORY_TURNS = 12;
 
@@ -26,20 +27,12 @@ interface ChatPanelProps {
   board: BoardState;
 }
 
-function loadMode(): AiMode {
-  try {
-    return localStorage.getItem(MODE_STORAGE_KEY) === 'gemini' ? 'gemini' : 'mock';
-  } catch {
-    return 'mock';
-  }
-}
-
 export function ChatPanel({ board }: ChatPanelProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [mode, setMode] = useState<AiMode>(loadMode);
+  const [mode, setMode] = useAiMode();
   const [status, setStatus] = useState<AiStatus | null | undefined>(undefined);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -52,11 +45,6 @@ export function ChatPanel({ board }: ChatPanelProps) {
   }, [messages, isTyping]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(MODE_STORAGE_KEY, mode);
-    } catch {
-      // Remembering the mode is a convenience only.
-    }
     if (mode === 'gemini') fetchAiStatus().then(setStatus);
   }, [mode]);
 
@@ -74,9 +62,10 @@ export function ChatPanel({ board }: ChatPanelProps) {
       const last = turns[turns.length - 1];
       const boardText = describeBoard(board.nodes, board.edges, board.gapIds);
       const briefText = describeBrief(board.brief);
+      const sourcesText = describeSources(board.sources);
       turns[turns.length - 1] = {
         ...last,
-        text: `PROJECT BRIEF\n${briefText}\n\nCURRENT BOARD\n${boardText}\n\nQUESTION\n${last.text}`,
+        text: `PROJECT BRIEF\n${briefText}\n\nSOURCE DOCUMENTS\n${sourcesText}\n\nCURRENT BOARD\n${boardText}\n\nQUESTION\n${last.text}`,
       };
 
       setIsTyping(true);
@@ -89,7 +78,7 @@ export function ChatPanel({ board }: ChatPanelProps) {
         setIsTyping(false);
       }
     },
-    [board.nodes, board.edges, board.gapIds, board.brief, mode],
+    [board.nodes, board.edges, board.gapIds, board.brief, board.sources, mode],
   );
 
   const handleSend = useCallback(() => {
@@ -142,17 +131,19 @@ export function ChatPanel({ board }: ChatPanelProps) {
                 </button>
               ))}
             </div>
-            <span className={`chat-panel__mode-status${geminiUnavailable ? ' is-error' : ''}`}>
-              {mode === 'mock'
-                ? 'canned replies, no API call'
-                : status === undefined
-                  ? 'checking…'
-                  : status === null
-                    ? 'dev server unreachable'
-                    : status.configured
-                      ? status.model
+            {mode === 'gemini' && status?.configured ? (
+              <ModelPicker />
+            ) : (
+              <span className={`chat-panel__mode-status${geminiUnavailable ? ' is-error' : ''}`}>
+                {mode === 'mock'
+                  ? 'canned replies, no API call'
+                  : status === undefined
+                    ? 'checking…'
+                    : status === null
+                      ? 'dev server unreachable'
                       : 'no API key set'}
-            </span>
+              </span>
+            )}
           </div>
 
           <div className="chat-panel__messages" ref={listRef}>

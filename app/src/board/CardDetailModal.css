@@ -325,3 +325,46 @@
 .card-modal__done:hover {
   opacity: 0.9;
 }
+
+.card-modal__source {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+}
+.card-modal__source-name {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.card-modal__source blockquote {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  font-style: italic;
+  color: var(--text-muted);
+}
+
+.card-modal__badge-wrap {
+  position: relative;
+  display: inline-flex;
+  margin: -4px -8px;
+  padding: 4px 8px;
+  border-radius: 7px;
+  transition: background 0.12s ease;
+}
+.card-modal__badge-wrap:hover,
+.card-modal__badge-wrap:focus-within {
+  background: color-mix(in srgb, var(--type-color) 14%, transparent);
+}
+
+.card-modal__source-ai-type {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--text-dim);
+}

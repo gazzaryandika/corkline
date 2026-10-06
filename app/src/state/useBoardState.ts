@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNodesState, useEdgesState, applyNodeChanges, type Node, type Edge, type NodeChange } from '@xyflow/react';
-import { CARD_WIDTH } from '../config';
+import { CARD_WIDTH, NODE_TYPE_ORDER } from '../config';
 import { computeGapIds } from '../lib/gaps';
 import { computeParallelLanes } from '../lib/parallelEdges';
 import { loadBoard, saveBoard, downloadBoard, exportFilename, projectStorageKey } from '../lib/storage';
@@ -10,12 +10,14 @@ import type {
   BoardNode,
   CardBoardNode,
   CardData,
+  CardProposal,
   EdgeKindId,
   GroupData,
   NodeTypeId,
   ProjectBrief,
   RelationData,
   SaveStatus,
+  SourceDoc,
 } from '../types';
 
 export type CardNode = Node<CardData, 'card'>;
@@ -49,10 +51,11 @@ function toRFNodes(doc: BoardDocument): AnyNode[] {
   });
 }
 
-function toDocument(nodes: AnyNode[], edges: RelationEdgeType[], brief: ProjectBrief): BoardDocument {
+function toDocument(nodes: AnyNode[], edges: RelationEdgeType[], brief: ProjectBrief, sources: SourceDoc[]): BoardDocument {
   return {
     version: 1,
     brief,
+    sources,
     nodes: nodes.map((n): BoardNode => {
       if (isGroup(n)) {
         return { id: n.id, type: 'group', position: n.position, width: n.width ?? CARD_WIDTH, height: n.height ?? DEFAULT_CARD_HEIGHT, data: n.data };
@@ -114,6 +117,39 @@ function fitGroupToChildren(nodes: AnyNode[], groupId: string): AnyNode[] {
   });
 }
 
+const DRAFT_COLUMN_GAP = 40;
+const DRAFT_ROW_STEP = 200;
+const DRAFT_MARGIN = 160;
+
+/** Positions for cards drafted from a document. Each document's cards go in a new
+ * band below everything already on the board, so nothing gets covered and the
+ * board reads top to bottom in the order documents were added. Every card type has
+ * a fixed column (Problem on the left … Assumption on the right), so the same type
+ * lines up across documents. */
+function layoutDraftCards(nodes: AnyNode[], types: NodeTypeId[]): Array<{ x: number; y: number }> {
+  const groupPos = new Map(nodes.filter(isGroup).map((g) => [g.id, g.position]));
+  let minX = Infinity;
+  let maxY = -Infinity;
+  for (const n of nodes) {
+    const offset = isCard(n) && n.parentId ? groupPos.get(n.parentId) ?? { x: 0, y: 0 } : { x: 0, y: 0 };
+    const height = isGroup(n) ? n.height ?? DEFAULT_CARD_HEIGHT : n.measured?.height ?? DEFAULT_CARD_HEIGHT;
+    minX = Math.min(minX, offset.x + n.position.x);
+    maxY = Math.max(maxY, offset.y + n.position.y + height);
+  }
+  const originX = Number.isFinite(minX) ? minX : 0;
+  const originY = Number.isFinite(maxY) ? maxY + DRAFT_MARGIN : 0;
+
+  const rowInColumn = new Map<NodeTypeId, number>();
+  return types.map((t) => {
+    const row = rowInColumn.get(t) ?? 0;
+    rowInColumn.set(t, row + 1);
+    return {
+      x: originX + NODE_TYPE_ORDER.indexOf(t) * (CARD_WIDTH + DRAFT_COLUMN_GAP),
+      y: originY + row * DRAFT_ROW_STEP,
+    };
+  });
+}
+
 function removeNodeById(nodes: AnyNode[], id: string): AnyNode[] {
   return nodes.filter((n) => n.id !== id);
 }
@@ -143,6 +179,7 @@ export function useBoardState(projectId: string) {
     initial.current.edges.map((e) => ({ id: e.id, type: 'relation', source: e.source, target: e.target, data: { ...e.data } })),
   );
   const [brief, setBrief] = useState<ProjectBrief>({ ...EMPTY_BRIEF, ...initial.current.brief });
+  const [sources, setSources] = useState<SourceDoc[]>(initial.current.sources ?? []);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [crossTabNotice, setCrossTabNotice] = useState(false);
@@ -224,11 +261,11 @@ export function useBoardState(projectId: string) {
       return;
     }
     setSaveStatus('saving');
-    pendingDoc.current = toDocument(nodes, edges, brief);
+    pendingDoc.current = toDocument(nodes, edges, brief, sources);
     if (saveTimer.current !== undefined) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(writePending, SAVE_DEBOUNCE_MS);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodes, edges, brief]);
+  }, [nodes, edges, brief, sources]);
 
   // Write any pending change straight away when leaving the board (e.g. back to the
   // projects page) or closing the tab, instead of losing the last half-second of edits.
@@ -263,6 +300,7 @@ export function useBoardState(projectId: string) {
       groupsFittedOnLoad.current = false;
       setNodes(toRFNodes(doc));
       setBrief({ ...EMPTY_BRIEF, ...doc.brief });
+      setSources(doc.sources ?? []);
       setEdges(doc.edges.map((e) => ({ id: e.id, type: 'relation', source: e.source, target: e.target, data: { ...e.data } })));
     },
     [setNodes, setEdges, projectId],
@@ -292,7 +330,7 @@ export function useBoardState(projectId: string) {
   );
 
   const updateCard = useCallback(
-    (id: string, patch: Partial<Pick<CardData, 'title' | 'body' | 'link' | 'image'>>) => {
+    (id: string, patch: Partial<Pick<CardData, 'nodeType' | 'title' | 'body' | 'link' | 'image'>>) => {
       setNodes((prev) => prev.map((n) => (isCard(n) && n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)));
     },
     [setNodes],
@@ -386,18 +424,62 @@ export function useBoardState(projectId: string) {
   );
 
   const exportBoard = useCallback(() => {
-    downloadBoard(toDocument(nodes, edges, brief), exportFilename(brief.name));
-  }, [nodes, edges, brief]);
+    downloadBoard(toDocument(nodes, edges, brief, sources), exportFilename(brief.name));
+  }, [nodes, edges, brief, sources]);
 
   const updateBrief = useCallback((patch: Partial<ProjectBrief>) => {
     setBrief((prev) => ({ ...prev, ...patch }));
   }, []);
+
+  // ---- source documents ----
+  const addSource = useCallback((doc: SourceDoc) => {
+    setSources((prev) => [...prev, doc]);
+  }, []);
+
+  const updateSource = useCallback((id: string, patch: Partial<SourceDoc>) => {
+    setSources((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+  }, []);
+
+  const removeSource = useCallback((id: string) => {
+    setSources((prev) => prev.filter((s) => s.id !== id));
+  }, []);
+
+  /** Puts approved proposals on the board as cards that remember their source.
+   * Returns the new card ids. */
+  const addCardsFromProposals = useCallback(
+    (source: SourceDoc, proposals: CardProposal[]) => {
+      const ids = proposals.map(() => crypto.randomUUID());
+      setNodes((prev) => {
+        const positions = layoutDraftCards(prev, proposals.map((p) => p.nodeType));
+        const added: CardNode[] = proposals.map((p, i) => ({
+          id: ids[i],
+          type: 'card',
+          position: positions[i],
+          dragHandle: CARD_DRAG_HANDLE,
+          data: {
+            nodeType: p.nodeType,
+            title: p.title,
+            body: p.body,
+            source: { docId: source.id, docName: source.name, quote: p.quote, aiType: p.suggestedType ?? p.nodeType },
+          },
+        }));
+        return [...prev, ...added];
+      });
+      return ids;
+    },
+    [setNodes],
+  );
 
   return {
     nodes,
     edges,
     brief,
     updateBrief,
+    sources,
+    addSource,
+    updateSource,
+    removeSource,
+    addCardsFromProposals,
     onNodesChange,
     onEdgesChange,
     gapIds,

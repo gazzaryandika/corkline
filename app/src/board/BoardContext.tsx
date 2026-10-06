@@ -4,7 +4,7 @@ import type { CardData } from '../types';
 export interface BoardContextValue {
   gapIds: Set<string>;
   laneById: Map<string, { index: number; count: number }>;
-  updateCard: (id: string, patch: Partial<Pick<CardData, 'title' | 'body' | 'link' | 'image'>>) => void;
+  updateCard: (id: string, patch: Partial<Pick<CardData, 'nodeType' | 'title' | 'body' | 'link' | 'image'>>) => void;
   deleteNode: (id: string) => void;
   deleteEdge: (id: string) => void;
   armedNodeId: string | null;

@@ -1,6 +1,69 @@
 # Corkline — Handover
 
-Last updated: 2026-10-06 (AI integration, step 1)
+Last updated: 2026-10-06 (Sources: documents → draft cards; branch `feature/document-upload`)
+
+## Sources: documents → draft cards (2026-10-06, Ayan)
+
+**Done: designers can add the documents behind a project and the AI drafts cards from them for review.**
+This is the "raw notes/transcript → draft cards" feature listed below, and it is the main human-direction
+and checking story for the rubric's "AI contribution" and "AI integration" criteria. Full details in
+`app/README.md` → "Sources".
+
+How it works: Toolbar → **▤ Sources** (or **Add a document** on an empty board) → add files or paste
+text → **Read with AI** → review list → accepted cards land on the board, each remembering its source.
+
+Decisions made (with Ayan):
+- **Review list, not one-at-a-time questions.** All proposals for a document are shown together; each
+  can be retyped, edited, accepted or rejected, or Accept all / Reject all. Undecided ones are discarded
+  when the review is finished. Unfinished reviews are saved with the board.
+- **Cards only for now.** The AI does not propose relationships (links) yet; that's the obvious next step.
+  It also doesn't fill in the Project brief.
+- **File types: PDF, Word (.docx), text/Markdown/CSV, pasted text, images and audio**, up to 14 MB each
+  (one request to Gemini is capped at 20 MB). Old .doc files are refused with a message to save as .docx.
+- **Upload first, local folder access next.** "Connect a folder" (File System Access API, Chrome/Edge
+  only) is the planned follow-up feature: Corkline would remember a folder and offer to read new or
+  changed files when the project opens.
+- **Every proposal carries the verbatim quote it rests on**, and for text/Word documents Corkline checks
+  the quote is really in the document (⚠ if not). This is the "designer can inspect and check the AI"
+  evidence. PDF/image/audio quotes can't be checked automatically and say so.
+- **Document kind steers the AI** (context brief → Problems and Assumptions; interview → Evidence from
+  what participants said, not the interviewer; etc.). Prompt text: `EXTRACT_SYSTEM_PROMPT` and
+  `EXTRACT_KIND_GUIDANCE` in `app/src/ai/prompts.ts`. Quote these in the write-up.
+- **Accepted cards go in a new band below the board**, one fixed column per card type, so the board
+  reads top to bottom in the order documents were added ("how the project evolved").
+- **Files are stored in the browser's IndexedDB**, not localStorage (far too small). Export/Import JSON
+  carries the source list but not the files; Duplicate copies them; Delete removes them.
+- The chat assistant now also receives the list of sources (with the AI's summary of each) and which
+  document each card came from, so it can answer "where does this claim come from?"
+- The AI proxy now retries automatically on Google's frequent 503 "high demand" answers (2 retries).
+
+Tested in the browser (2026-10-06): new project → empty-board prompt → upload a Markdown brief → Mock
+read → review → cards on board; Gemini read of the brief (7 sensible cards, all quotes verified, skipped a
+point already on the board); a PDF interview transcript (3 Evidence cards from the participant's lines);
+a PNG photo of sticky notes (read correctly); a .docx (text extracted); pasted text; reload keeps a
+half-finished review; Duplicate copies files, Delete removes them; export/import validation; chat answer
+cites the sources. **Not tested with a real audio recording** (no sample file was available), so audio
+is supported by Gemini but unverified here.
+
+Also added on this branch: **changing a card's type**, both in the review list (before accepting) and
+on the board (click the card's type badge, or the type in its full view). When a card from a document
+ends up with a different type than the AI proposed, that's recorded and shown ("AI suggested: Evidence
+· changed by the designer"), which is useful evidence of human checking for the write-up.
+
+Also added on this branch: a **Gemini model picker** next to Mock / Gemini (chat and Sources panel).
+It lists the chat models the API key can use (fetched from Google), remembers the choice per browser,
+and greys out models Google refuses for the key. Added because the free tier ran out of quota on the
+full Flash models during testing; Lite models have much higher free limits. See `app/README.md`.
+
+Known limits / next steps:
+- Gemini's newer Flash models (3.5–3.8) were often overloaded or out of free quota on 2026-10-06; Ayan's
+  local `.env.local` default is now `gemini-3.5-flash-lite`. The app's built-in default,
+  `gemini-2.5-flash`, is **not available to new Google accounts** (404), so it should change; see
+  `app/vite.config.ts`. (The model picker works around it, but a new teammate's first message would fail.)
+- Next: AI-proposed relationships between new and existing cards (e.g. new Evidence *Supports* an
+  Insight), then folder access.
+- Privacy: in Gemini mode the panel warns that documents go to Google and may be used to improve its
+  products on the free tier. Anonymise real participant material first.
 
 ## AI integration progress (2026-10-06)
 
@@ -74,11 +137,13 @@ Open decisions / next steps:
    - Files: `app/src/pages/ProjectsPage.tsx`, `app/src/lib/route.ts`, `app/src/BoardScreen.tsx`, and the
      project functions in `app/src/lib/storage.ts`.
    - A shared online database (team access) was considered and deferred.
-2. **Should the AI change the board?** The options are to stay read-only, or to have it propose changes
-   (new card or link) that the user Accepts or Rejects. The second bends the "AI doesn't add ideas"
-   rule, and it's the user's call.
+2. **Should the AI change the board?** Partly decided (2026-10-06, Ayan): the AI may **propose cards
+   drafted from the designer's own documents**, which the designer accepts, edits or rejects; nothing
+   reaches the board without approval. See "Sources" below. **Gazza should confirm** this reading of
+   the "AI doesn't invent ideas" rule before the pull request is merged. Proposing *links* between cards
+   is still open (deliberately left out of this first version).
 3. Then the planned features, which reuse `askAi()`:
-   - raw notes/transcript → draft cards (strongest rubric fit)
+   - ~~raw notes/transcript → draft cards (strongest rubric fit)~~ **Done**, see "Sources" below.
    - AI reasoning check that highlights cards
    - a board summary
 4. Check that the Google project is on the **free tier** (no billing) so there's no surprise cost. Free

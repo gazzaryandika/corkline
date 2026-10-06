@@ -1,0 +1,26 @@
+.model-picker {
+  min-width: 0;
+  max-width: 100%;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 3px;
+  cursor: pointer;
+}
+.model-picker:hover {
+  border-color: var(--text-faint);
+}
+.model-picker:focus {
+  outline: none;
+  border-color: var(--brand-b);
+}
+
+.model-picker__loading {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-faint);
+}

@@ -155,3 +155,21 @@
 .icon-btn:hover {
   background: var(--surface-muted);
 }
+
+.toolbar__sources {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.toolbar__count {
+  font-weight: 700;
+  color: var(--text-dim);
+}
+.toolbar__badge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--brand-b);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 700;
+}
