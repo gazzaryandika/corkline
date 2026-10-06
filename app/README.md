@@ -72,7 +72,7 @@ https://aistudio.google.com/apikey into `GEMINI_API_KEY`, and restart `npm run d
 git-ignored. Optionally set `GEMINI_MODEL` to change the model.
 
 - `src/ai/client.ts`: `askAi(mode, request)`, the single entry point every AI feature uses.
-- `src/ai/boardContext.ts`: writes the board out as text (cards labelled C1, C2…, relationships, gaps,
+- `src/ai/boardContext.ts`: writes the board out as text (cards named by type + title, e.g. Insight "…", relationships, gaps,
   selection) for the model to read.
 - `src/ai/prompts.ts`: the system instructions defining the AI's role (inspect reasoning, don't invent ideas).
 

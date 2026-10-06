@@ -23,10 +23,12 @@ What was built (see `app/README.md` → "AI (Google Gemini)" for file details):
   at server start, so restart `npm run dev` after changing it.
 - `app/src/ai/client.ts`: `askAi(mode, request)`, the single entry point for every AI feature. It has
   two modes: **Mock** (free, canned replies) and **Gemini** (real call).
-- `app/src/ai/boardContext.ts`: turns the board into text for the model. Cards are labelled C1, C2…
-  with their type, title, body, group, SELECTED and GAP flags, plus all relationships.
+- `app/src/ai/boardContext.ts`: turns the board into text for the model. It lists each card's
+  type, title, body, group, SELECTED and GAP flags, plus all relationships.
 - `app/src/ai/prompts.ts`: the system prompt, i.e. the AI's role and rules, including "no Markdown".
   Quote this in the write-up.
+- Cards are referred to by type + title (e.g. Insight "Physical money is understood…"), never internal codes, so
+  users can find them on the canvas. Duplicate names get (2), (3).
 - `app/src/ai/plainText.ts`: a safety net that strips any Markdown the model still produces.
 - Chat panel (`app/src/components/ChatPanel.tsx`):
   - Mock/Gemini switch.
@@ -38,7 +40,7 @@ Verified:
 - Build, type-check and lint all pass.
 - Mock mode works.
 - The no-key error shows correctly.
-- A real Gemini answer about the example board cited cards correctly (C14, C10, C13) and judged
+- A real Gemini answer about the example board cited the right cards and judged
   evidence strength sensibly.
 
 **Security note:** one API key was pasted into the chat on 2026-10-06. The user was told to delete it in
