@@ -184,9 +184,13 @@ The actual fix that stuck: **stopped relying on the native `hidden` attribute en
 
 ## Quick facts for whoever picks this up
 
+- **GitHub (private):** https://github.com/gazzaryandika/corkline. Owner is gazzaryandika; collaborator
+  ayan2509 (write access, invited 2026-10-06). Team workflow (branches, pull requests, tags, rollback) is
+  in `CLAUDE.md`. Tag `v0.4-projects` marks the state with the projects page, project brief and Gemini chat.
+
 - **Current app**: `cd app && npm install && npm run dev`, then open the localhost URL Vite prints. See `app/README.md`.
 - **Historical reference only**: `corkline.html` at this folder's root, the original no-build-step single-file version. Still opens directly in a browser but is no longer where development happens.
 - State is seeded example data on first load, then whatever's in `localStorage` after that (new app uses key `corkline-board-v1`, a different key than the old file's `corkline-state`, so the two don't collide if both are ever open at once).
 - The new app also has explicit Export/Import JSON buttons in the toolbar — use Export to keep an actual backup, since `localStorage` alone was the original's single point of failure.
 - The Gemini API key lives only in `app/.env.local` (git-ignored) and is used server-side by `app/server/aiProxy.ts`. Never commit it, and never put a key in browser code.
-- This folder is now a git repository (`git init` was run at this root) but has no commits yet — nothing has been committed automatically.
+- Git history and GitHub: see the first bullet in this section.
