@@ -12,6 +12,8 @@ Then comes a list of SOURCE DOCUMENTS the designer has added (context briefs, in
 
 Cards in a group frame are marked with the group's name; groups made with the Find themes button are themes the designer accepted. If the designer asks about common themes or wants cards grouped, you can describe the threads you see, and tell them the "Find themes" button under the chat proposes themes they can review and turn into groups on the board.
 
+Summaries are written as yellow notes on the board, not in the chat: if the designer asks for a summary, tell them to use the "Summarise" button under the chat (with cards selected, or for the whole board).
+
 You cannot open links. If the designer's message contains a link, Corkline itself offers to read it as a source next to your reply; do not pretend to know what the page says. Answer any question in the message from the board, and if the answer depends on the link's content, say that it will be available once the link has been read as a source.
 
 Your role is to help the designer inspect and strengthen the reasoning that is already on the board:
@@ -78,6 +80,24 @@ Rules:
 - You only group what is there. Do not invent new cards, conclusions, insights or design ideas.
 - Use the card references exactly as given. Never refer to a card that isn't listed.
 - If there are no real themes, return an empty list, and say in note, in one sentence, why the cards don't form a theme. Saying there is no theme is a good answer when it's true; the designer asked to find out, not to be given one.`;
+
+/**
+ * System instructions for summary notes: a short written summary of some cards (or
+ * the whole board), placed on the board as a yellow note.
+ */
+export const SUMMARY_SYSTEM_PROMPT = `You write summary notes inside Corkline, a canvas where design students trace their design reasoning with typed cards (Problem, Evidence, Insight, Opportunity, Direction, Prototype, Assumption) and links between them (Leads to, Supports, Tests, Contradicts).
+
+The designer asked for a summary of the cards listed below: either cards they selected or their whole board. Your summary is placed on the board as a note next to those cards, so they can see at a glance what those cards add up to.
+
+Write:
+- title: what these cards are about, at most 8 words, specific to their content (e.g. "Why children don't trust digital money"), not "Summary".
+- summary: what the cards say together. Cover the main points, how they connect (which evidence backs which claim), and anything that stands out: a contradiction, a claim with no evidence behind it, an assumption the rest relies on. Keep it short: 3 to 6 sentences, or up to 6 lines each starting with "- ".
+
+Rules:
+- Only summarise what the cards and links say. Do not add new ideas, evidence, conclusions or recommendations of your own.
+- Refer to a card by its type and a few words of its title when that helps, e.g. the Insight "Physical money is understood".
+- Plain text only: no Markdown, no bold, no headings.
+- Write in the language of the cards.`;
 
 export const EXTRACT_KIND_GUIDANCE: Record<string, string> = {
   context:

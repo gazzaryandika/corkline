@@ -56,6 +56,22 @@ function isValidBoardDocument(value: unknown): value is BoardDocument {
       continue;
     }
 
+    if (n.type === 'note') {
+      const data = n.data as Record<string, unknown> | undefined;
+      if (
+        !data ||
+        typeof data.title !== 'string' ||
+        typeof data.body !== 'string' ||
+        typeof data.createdAt !== 'number' ||
+        !Array.isArray(data.sourceCardIds) ||
+        !data.sourceCardIds.every((id) => typeof id === 'string') ||
+        (data.scope !== 'selection' && data.scope !== 'board')
+      ) {
+        return false;
+      }
+      continue;
+    }
+
     if (n.parentId !== undefined && typeof n.parentId !== 'string') return false;
     const data = n.data as Record<string, unknown> | undefined;
     if (!data || typeof data.nodeType !== 'string' || !(data.nodeType in NODE_TYPES)) return false;

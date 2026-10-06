@@ -3,6 +3,7 @@ import { Background, BackgroundVariant, ReactFlow, useReactFlow, type NodeTypes,
 import '@xyflow/react/dist/style.css';
 import { CardNode } from './CardNode';
 import { GroupFrame } from './GroupFrame';
+import { NoteNode } from './NoteNode';
 import { RelationEdge } from './RelationEdge';
 import { EdgeMarkers } from './EdgeMarkers';
 import { EdgeKindMenu } from './EdgeKindMenu';
@@ -14,7 +15,7 @@ import type { BoardState, CardNode as CardNodeData, RelationEdgeType } from '../
 import type { EdgeKindId } from '../types';
 import './board.css';
 
-const nodeTypes: NodeTypes = { card: CardNode, group: GroupFrame };
+const nodeTypes: NodeTypes = { card: CardNode, group: GroupFrame, note: NoteNode };
 const edgeTypes: EdgeTypes = { relation: RelationEdge };
 const SNAP_GRID: [number, number] = [26, 26];
 
@@ -45,10 +46,13 @@ function findNodeIdAtPoint(clientX: number, clientY: number, excludeId: string):
 
 interface BoardCanvasProps {
   board: BoardState;
+  /** The summary note whose cards are highlighted (set by clicking it, or from the chat). */
+  highlightedNoteId: string | null;
+  onHighlightNote: (id: string | null) => void;
 }
 
-export function BoardCanvas({ board }: BoardCanvasProps) {
-  const { screenToFlowPosition, getInternalNode } = useReactFlow<CardNodeData, RelationEdgeType>();
+export function BoardCanvas({ board, highlightedNoteId, onHighlightNote }: BoardCanvasProps) {
+  const { screenToFlowPosition, getInternalNode, fitView } = useReactFlow<CardNodeData, RelationEdgeType>();
 
   const [armedNodeId, setArmedNodeIdState] = useState<string | null>(null);
   const [tempEnd, setTempEnd] = useState<{ x: number; y: number } | null>(null);
@@ -154,6 +158,10 @@ export function BoardCanvas({ board }: BoardCanvasProps) {
         setHighlightedCardId(null);
         return;
       }
+      if (e.key === 'Escape' && highlightedNoteId) {
+        onHighlightNote(null);
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'g') {
         const target = e.target as HTMLElement | null;
         if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
@@ -166,7 +174,7 @@ export function BoardCanvas({ board }: BoardCanvasProps) {
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [board, disarm, highlightedCardId]);
+  }, [board, disarm, highlightedCardId, highlightedNoteId, onHighlightNote]);
 
   const handlePick = useCallback(
     (kind: EdgeKindId) => {
@@ -190,7 +198,38 @@ export function BoardCanvas({ board }: BoardCanvasProps) {
     [highlightedCardId],
   );
 
+  // A clicked summary note lights up itself, the cards it summarises, the frames they
+  // sit in, and the links between those cards.
+  const noteFocus = useMemo(() => {
+    if (!highlightedNoteId) return null;
+    const note = board.nodes.find((n) => n.id === highlightedNoteId && n.type === 'note');
+    if (!note || note.type !== 'note') return null;
+    const cards = new Set(note.data.sourceCardIds);
+    const nodeIds = new Set<string>([note.id]);
+    for (const n of board.nodes) {
+      if (n.type === 'card' && cards.has(n.id)) {
+        nodeIds.add(n.id);
+        if (n.parentId) nodeIds.add(n.parentId);
+      }
+    }
+    const edgeIds = new Set(board.edges.filter((e) => cards.has(e.source) && cards.has(e.target)).map((e) => e.id));
+    return { nodeIds, edgeIds };
+  }, [highlightedNoteId, board.nodes, board.edges]);
+
+  // Show the note and its cards when it gets highlighted.
+  useEffect(() => {
+    if (!noteFocus) return;
+    const id = window.setTimeout(
+      () => fitView({ nodes: [...noteFocus.nodeIds].map((nodeId) => ({ id: nodeId })), padding: 0.25, maxZoom: 1, duration: 450 }),
+      60,
+    );
+    return () => window.clearTimeout(id);
+    // Only when a different note is highlighted, not on every board change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightedNoteId]);
+
   const focusNodeIds = useMemo(() => {
+    if (noteFocus) return noteFocus.nodeIds;
     if (highlightAnchorIds.size === 0) return null;
     const ids = new Set<string>(highlightAnchorIds);
     for (const n of board.nodes) {
@@ -205,16 +244,17 @@ export function BoardCanvas({ board }: BoardCanvasProps) {
       if (highlightAnchorIds.has(e.target)) ids.add(e.source);
     }
     return ids;
-  }, [highlightAnchorIds, board.nodes, board.edges]);
+  }, [noteFocus, highlightAnchorIds, board.nodes, board.edges]);
 
   const focusEdgeIds = useMemo(() => {
+    if (noteFocus) return noteFocus.edgeIds;
     if (highlightAnchorIds.size === 0) return null;
     const ids = new Set<string>();
     for (const e of board.edges) {
       if (highlightAnchorIds.has(e.source) || highlightAnchorIds.has(e.target)) ids.add(e.id);
     }
     return ids;
-  }, [highlightAnchorIds, board.edges]);
+  }, [noteFocus, highlightAnchorIds, board.edges]);
 
   const contextValue = useMemo<BoardContextValue>(
     () => ({
@@ -231,9 +271,13 @@ export function BoardCanvas({ board }: BoardCanvasProps) {
       focusNodeIds,
       focusEdgeIds,
       dropTargetGroupId,
+      updateNoteTitle: board.updateNoteTitle,
+      highlightedNoteId,
     }),
     [
       dropTargetGroupId,
+      board.updateNoteTitle,
+      highlightedNoteId,
       board.gapIds,
       board.laneById,
       board.updateCard,
@@ -278,6 +322,13 @@ export function BoardCanvas({ board }: BoardCanvasProps) {
           onPaneClick={() => {
             if (armedRef.current) disarm();
             setHighlightedCardId(null);
+            onHighlightNote(null);
+          }}
+          onNodeClick={(_, node) => {
+            // Clicking a summary note toggles highlighting its cards.
+            if (node.type !== 'note') return;
+            setHighlightedCardId(null);
+            onHighlightNote(highlightedNoteId === node.id ? null : node.id);
           }}
           onNodeContextMenu={handleNodeContextMenu}
           onNodeDrag={(event, node) => {
@@ -318,6 +369,7 @@ export function BoardCanvas({ board }: BoardCanvasProps) {
             clientY={cardMenu.clientY}
             isHighlighted={highlightedCardId === cardMenu.cardId}
             onSeeConnections={() => {
+              onHighlightNote(null);
               setHighlightedCardId(cardMenu.cardId);
               setCardMenu(null);
             }}

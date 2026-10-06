@@ -20,6 +20,9 @@ export interface BoardContextValue {
   focusEdgeIds: Set<string> | null;
   /** The frame a card being dragged would join if dropped now. */
   dropTargetGroupId: string | null;
+  updateNoteTitle: (id: string, title: string) => void;
+  /** The summary note whose cards are highlighted right now. */
+  highlightedNoteId: string | null;
 }
 
 export const BoardContext = createContext<BoardContextValue | null>(null);

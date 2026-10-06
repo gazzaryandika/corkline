@@ -187,6 +187,26 @@ the visit only (not saved).
 Note: the Lite models find fewer themes than full Flash, and results vary between runs; run it again
 or use a bigger model from the picker if it misses obvious ones.
 
+## Summary notes
+
+**✦ Summarise** (under the AI Assistant's messages) writes a summary and puts it on the board as a
+**yellow note**, not in the chat. With cards selected it summarises those ("✦ Summarise 3 selected")
+and the note goes to their right; with nothing selected it summarises the whole board and the note
+goes to its left. Typing "summarise these", "give me a summary of the board", "recap" or "tl;dr" does
+the same (`isSummaryRequest` in `ChatPanel.tsx`); the chat only says the note was added, with **Show on
+board**.
+
+A note shows a title (editable), the date and time, what it covers ("3 selected cards" / "the whole
+board (8 cards)", plus how many have since been removed), the summary, and the model. **Clicking it**
+highlights the cards it summarises (everything else dims) and moves the view to them; clicking again,
+clicking empty canvas or Esc clears it. × deletes it (click twice to confirm).
+
+Notes are a separate node type (`note`, `src/board/NoteNode.tsx`), saved and exported with the board.
+They are not cards: they aren't sent to the AI as part of the board, can't be linked or themed, and
+don't count as cards. The instructions are `SUMMARY_SYSTEM_PROMPT` (summarise only what the cards and
+links say, point out contradictions or unsupported claims, add nothing new); `src/ai/summary.ts` sends
+only the chosen cards and the links between them.
+
 **Changing a card's type.** In the review list, each proposal's **Type** dropdown changes it before
 accepting; the row then shows "AI suggested Evidence · undo". On the board, click a card's type badge
 (e.g. "EVID ▾") or the type in its full view to pick another type (`src/board/CardTypeSelect.tsx`, an

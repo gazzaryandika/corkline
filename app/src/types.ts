@@ -89,7 +89,29 @@ export interface GroupBoardNode {
   data: GroupData;
 }
 
-export type BoardNode = CardBoardNode | GroupBoardNode;
+/** An AI summary of some cards (or the whole board), shown as a yellow note. Not a card:
+ * it isn't evidence, isn't sent to the AI as part of the board, and can't be linked. */
+export interface NoteData {
+  title: string;
+  body: string;
+  /** When the summary was written (ms since epoch). */
+  createdAt: number;
+  /** The cards it summarises, so clicking the note can highlight them. */
+  sourceCardIds: string[];
+  scope: 'selection' | 'board';
+  /** Model that wrote it ('mock' for canned text). */
+  model: string;
+  [key: string]: unknown;
+}
+
+export interface NoteBoardNode {
+  id: string;
+  type: 'note';
+  position: { x: number; y: number };
+  data: NoteData;
+}
+
+export type BoardNode = CardBoardNode | GroupBoardNode | NoteBoardNode;
 
 /** What the project is about. Shown in the Project panel and sent to the AI with every request. */
 export interface ProjectBrief {

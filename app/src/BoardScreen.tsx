@@ -29,6 +29,9 @@ export function BoardScreen({ projectId, isNew }: BoardScreenProps) {
   const openReview = useCallback((docId: string) => setSourcesPanel({ reviewId: docId }), []);
   const closeSources = useCallback(() => setSourcesPanel(null), []);
 
+  /** The summary note whose cards are highlighted on the board. */
+  const [highlightedNoteId, setHighlightedNoteId] = useState<string | null>(null);
+
   // Themes the AI found and the designer hasn't finished reviewing (kept for this visit only).
   const [themeReview, setThemeReview] = useState<{ themes: ThemeProposal[]; model: string } | null>(null);
   const [themesOpen, setThemesOpen] = useState(false);
@@ -75,7 +78,7 @@ export function BoardScreen({ projectId, isNew }: BoardScreenProps) {
           </Banner>
         )}
         <main className="app-main">
-          <BoardCanvas board={board} />
+          <BoardCanvas board={board} highlightedNoteId={highlightedNoteId} onHighlightNote={setHighlightedNoteId} />
           {isEmpty && (
             <div className="board-empty">
               <p className="board-empty__title">This board is empty</p>
@@ -93,6 +96,7 @@ export function BoardScreen({ projectId, isNew }: BoardScreenProps) {
             themesPending={themeReview !== null}
             onThemesFound={handleThemesFound}
             onOpenThemes={() => setThemesOpen(true)}
+            onShowNote={setHighlightedNoteId}
           />
         </main>
         {sourcesPanel && (

@@ -14,6 +14,7 @@ import type {
   EdgeKindId,
   GroupData,
   NodeTypeId,
+  NoteData,
   ProjectBrief,
   RelationData,
   SaveStatus,
@@ -22,7 +23,8 @@ import type {
 
 export type CardNode = Node<CardData, 'card'>;
 export type GroupNode = Node<GroupData, 'group'>;
-export type AnyNode = CardNode | GroupNode;
+export type NoteNode = Node<NoteData, 'note'>;
+export type AnyNode = CardNode | GroupNode | NoteNode;
 export type RelationEdgeType = Edge<RelationData, 'relation'>;
 
 const SAVE_DEBOUNCE_MS = 500;
@@ -39,11 +41,20 @@ function isCard(n: AnyNode): n is CardNode {
 function isGroup(n: AnyNode): n is GroupNode {
   return n.type === 'group';
 }
+function isNote(n: AnyNode): n is NoteNode {
+  return n.type === 'note';
+}
+
+const NOTE_WIDTH = 280;
+const NOTE_GAP = 60;
 
 function toRFNodes(doc: BoardDocument): AnyNode[] {
-  return doc.nodes.map((n) => {
+  return doc.nodes.map((n): AnyNode => {
     if (n.type === 'group') {
       return { id: n.id, type: 'group', position: { ...n.position }, width: n.width, height: n.height, data: { ...n.data } };
+    }
+    if (n.type === 'note') {
+      return { id: n.id, type: 'note', position: { ...n.position }, data: { ...n.data, sourceCardIds: [...n.data.sourceCardIds] } };
     }
     const rfNode: CardNode = { id: n.id, type: 'card', position: { ...n.position }, data: { ...n.data }, dragHandle: CARD_DRAG_HANDLE };
     if (n.parentId) rfNode.parentId = n.parentId;
@@ -60,6 +71,7 @@ function toDocument(nodes: AnyNode[], edges: RelationEdgeType[], brief: ProjectB
       if (isGroup(n)) {
         return { id: n.id, type: 'group', position: n.position, width: n.width ?? CARD_WIDTH, height: n.height ?? DEFAULT_CARD_HEIGHT, data: n.data };
       }
+      if (isNote(n)) return { id: n.id, type: 'note', position: n.position, data: n.data };
       const entry: CardBoardNode = { id: n.id, type: 'card', position: n.position, data: n.data };
       if (n.parentId) entry.parentId = n.parentId;
       return entry;
@@ -594,6 +606,49 @@ export function useBoardState(projectId: string) {
     [setNodes],
   );
 
+  /** Puts a summary note on the board and returns its id. A note about some cards goes
+   * just right of them; a whole-board summary goes left of the board. Notes already in
+   * that spot are stepped past, so they never stack exactly. */
+  const addNote = useCallback(
+    (data: NoteData) => {
+      const id = crypto.randomUUID();
+      setNodes((prev) => {
+        const groupPos = new Map(prev.filter(isGroup).map((g) => [g.id, g.position]));
+        const sources = new Set(data.sourceCardIds);
+        const relevant = data.scope === 'selection' ? prev.filter((n) => sources.has(n.id)) : prev.filter((n) => !isNote(n));
+        let minX = Infinity;
+        let maxX = -Infinity;
+        let minY = Infinity;
+        for (const n of relevant) {
+          const offset = isCard(n) && n.parentId ? groupPos.get(n.parentId) ?? { x: 0, y: 0 } : { x: 0, y: 0 };
+          const x = offset.x + n.position.x;
+          const width = isGroup(n) ? n.width ?? CARD_WIDTH : n.measured?.width ?? CARD_WIDTH;
+          minX = Math.min(minX, x);
+          maxX = Math.max(maxX, x + width);
+          minY = Math.min(minY, offset.y + n.position.y);
+        }
+        const position = Number.isFinite(minX)
+          ? { x: data.scope === 'selection' ? maxX + NOTE_GAP : minX - NOTE_WIDTH - NOTE_GAP, y: minY }
+          : { x: 0, y: 0 };
+        const notes = prev.filter(isNote);
+        while (notes.some((n) => Math.abs(n.position.x - position.x) < 30 && Math.abs(n.position.y - position.y) < 30)) {
+          position.y += 48;
+        }
+        const note: NoteNode = { id, type: 'note', position, data };
+        return [...prev, note];
+      });
+      return id;
+    },
+    [setNodes],
+  );
+
+  const updateNoteTitle = useCallback(
+    (id: string, title: string) => {
+      setNodes((prev) => prev.map((n) => (isNote(n) && n.id === id ? { ...n, data: { ...n.data, title } } : n)));
+    },
+    [setNodes],
+  );
+
   /** Puts accepted AI themes on the board as group frames. Returns the frame ids. */
   const createThemes = useCallback(
     (themes: ThemeToCreate[]) => {
@@ -717,6 +772,8 @@ export function useBoardState(projectId: string) {
     removeFromGroup,
     moveCardsIntoGroup,
     createThemes,
+    addNote,
+    updateNoteTitle,
     updateGroupLabel,
   };
 }

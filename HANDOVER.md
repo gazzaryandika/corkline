@@ -2,6 +2,24 @@
 
 Last updated: 2026-10-06 (Sources: documents → draft cards; branch `feature/document-upload`)
 
+## Summary notes (2026-10-06, Ayan; branch `feature/summary-notes`, built on `feature/ai-themes`)
+
+**Done: AI summaries go on the board as yellow notes**, not in the chat. ✦ Summarise (or typing
+"summarise these" / "summarise the board") → a sticky note with a title, date and time, what it covers,
+and the summary. Clicking the note highlights the cards it summarises; × deletes it. Details in
+`app/README.md` → "Summary notes".
+
+Decisions (with Ayan): notes look clearly different from cards (yellow, tilted, no type bar or
+connector); selection → note beside those cards, whole board → note to the left of the board; notes are
+a separate node type kept out of everything the AI reads, so summaries never become evidence.
+
+Tested 2026-10-06 (Gemini 3.5 Flash-Lite): 3 selected cards → accurate summary of how two Evidence cards
+support the Insight; whole board → it pointed out the Contradicts link and the untested assumption;
+click to highlight/unhighlight, Esc, delete, reload.
+
+**Older app versions can't open boards that contain notes** (their storage check doesn't know the
+`note` type and would ignore the whole board). Merge this before sharing exports with notes.
+
 ## Themes: AI-suggested groups (2026-10-06, Ayan; branch `feature/ai-themes`, built on `feature/link-sources`)
 
 **Done: the AI can propose themes among the cards on the board, which the designer reviews.** ✦ Find

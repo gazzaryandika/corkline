@@ -11,6 +11,7 @@ import { displayLink, findLinks, isYouTube, withoutLinks } from '../lib/links';
 import type { SourceActions } from '../state/useSourceActions';
 import type { BoardState, CardNode } from '../state/useBoardState';
 import { findThemes } from '../ai/themes';
+import { summarise } from '../ai/summary';
 import type { SourceDoc, SourceKindId, ThemeProposal } from '../types';
 import './ChatPanel.css';
 
@@ -52,6 +53,23 @@ interface ThemesRun {
   error?: string;
 }
 
+/** A summary request and the note it put on the board. Not sent to the model as chat. */
+interface SummaryRun {
+  id: string;
+  role: 'summary';
+  status: 'writing' | 'done' | 'error';
+  /** Set when it summarised the designer's selection rather than the whole board. */
+  selectedIds?: string[];
+  noteId?: string;
+  title?: string;
+  error?: string;
+}
+
+/** "Summarise these", "give me a summary of the board", "recap", "tl;dr"… */
+function isSummaryRequest(text: string): boolean {
+  return /\b(summar(y|ies|ise|ize|ised|ized|ising|izing)|sum (it |this |these |them )?up|recap|tl;?dr)\b/i.test(text);
+}
+
 /** "Find themes in these", "are there any themes?", "cluster these cards"… */
 function isThemeRequest(text: string): boolean {
   const t = text.toLowerCase();
@@ -66,7 +84,8 @@ type ChatMessage =
   | { id: string; role: 'assistant'; text: string; model: string }
   | { id: string; role: 'error'; text: string }
   | LinkOffer
-  | ThemesRun;
+  | ThemesRun
+  | SummaryRun;
 
 interface ChatPanelProps {
   board: BoardState;
@@ -77,9 +96,19 @@ interface ChatPanelProps {
   themesPending: boolean;
   onThemesFound: (themes: ThemeProposal[], model: string) => void;
   onOpenThemes: () => void;
+  /** Highlights a summary note's cards on the board (and shows them). */
+  onShowNote: (noteId: string) => void;
 }
 
-export function ChatPanel({ board, sourceActions, onOpenReview, themesPending, onThemesFound, onOpenThemes }: ChatPanelProps) {
+export function ChatPanel({
+  board,
+  sourceActions,
+  onOpenReview,
+  themesPending,
+  onThemesFound,
+  onOpenThemes,
+  onShowNote,
+}: ChatPanelProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
@@ -163,6 +192,37 @@ export function ChatPanel({ board, sourceActions, onOpenReview, themesPending, o
     [mode, board.nodes, board.brief, onThemesFound],
   );
 
+  const writingSummary = messages.some((m) => m.role === 'summary' && m.status === 'writing');
+
+  /** Writes a summary of the selection (or the whole board) and puts it on the board
+   * as a note. `existingId` retries a run. */
+  const runSummary = useCallback(
+    async (selectedIds?: string[], existingId?: string) => {
+      const id = existingId ?? crypto.randomUUID();
+      const patch = (p: Partial<SummaryRun>) =>
+        setMessages((prev) => prev.map((m) => (m.id === id && m.role === 'summary' ? { ...m, ...p } : m)));
+      if (existingId) patch({ status: 'writing', error: undefined });
+      else setMessages((prev) => [...prev, { id, role: 'summary', status: 'writing', selectedIds }]);
+      try {
+        const result = await summarise(mode, board.nodes, board.edges, board.gapIds, board.brief, selectedIds);
+        const noteId = board.addNote({
+          title: result.title,
+          body: result.body,
+          createdAt: Date.now(),
+          sourceCardIds: result.cardIds,
+          scope: selectedIds ? 'selection' : 'board',
+          model: result.model,
+        });
+        patch({ status: 'done', noteId, title: result.title });
+        // Let the note render, then show it with its cards.
+        window.setTimeout(() => onShowNote(noteId), 120);
+      } catch (err) {
+        patch({ status: 'error', error: (err as Error).message });
+      }
+    },
+    [mode, board, onShowNote],
+  );
+
   const handleSend = useCallback(() => {
     const text = draft.trim();
     if (!text || isTyping) return;
@@ -186,12 +246,18 @@ export function ChatPanel({ board, sourceActions, onOpenReview, themesPending, o
     setDraft('');
     // "Find themes in these" etc. runs the theme finder (on the selection, if any)
     // instead of a chat answer, so the result can be reviewed and put on the board.
+    const selection = selectedCards.length > 0 ? selectedCards.map((c) => c.id) : undefined;
     if (offers.length === 0 && isThemeRequest(text) && !findingThemes) {
-      void runThemes(selectedCards.length > 0 ? selectedCards.map((c) => c.id) : undefined);
+      void runThemes(selection);
+      return;
+    }
+    // "Summarise these" puts a summary note on the board instead of answering in chat.
+    if (offers.length === 0 && isSummaryRequest(text) && !writingSummary) {
+      void runSummary(selection);
       return;
     }
     if (offers.length === 0 || withoutLinks(text).length > 0) void run(next);
-  }, [draft, isTyping, messages, selectedCards, run, runThemes, findingThemes]);
+  }, [draft, isTyping, messages, selectedCards, run, runThemes, findingThemes, runSummary, writingSummary]);
 
   const patchLink = useCallback((id: string, patch: Partial<LinkOffer>) => {
     setMessages((prev) => prev.map((m) => (m.id === id && m.role === 'link' ? { ...m, ...patch } : m)));
@@ -278,7 +344,15 @@ export function ChatPanel({ board, sourceActions, onOpenReview, themesPending, o
               </p>
             )}
             {messages.map((m) =>
-              m.role === 'themes' ? (
+              m.role === 'summary' ? (
+                <SummaryRunCard
+                  key={m.id}
+                  run={m}
+                  noteExists={!!m.noteId && board.nodes.some((n) => n.id === m.noteId)}
+                  onShow={() => m.noteId && onShowNote(m.noteId)}
+                  onRetry={() => void runSummary(m.selectedIds, m.id)}
+                />
+              ) : m.role === 'themes' ? (
                 <ThemesRunCard
                   key={m.id}
                   run={m}
@@ -342,6 +416,14 @@ export function ChatPanel({ board, sourceActions, onOpenReview, themesPending, o
               }
             >
               ✦ Find themes{selectedCards.length > 0 ? ` in ${selectedCards.length} selected` : ''}
+            </button>
+            <button
+              type="button"
+              onClick={() => void runSummary(selectedCards.length > 0 ? selectedCards.map((c) => c.id) : undefined)}
+              disabled={writingSummary}
+              title="Write a summary as a yellow note on the board. Select cards first to summarise just those."
+            >
+              ✦ Summarise {selectedCards.length > 0 ? `${selectedCards.length} selected` : 'board'}
             </button>
           </div>
 
@@ -520,6 +602,59 @@ function ThemesRunCard({ run, canReview, onReview, onRetry }: ThemesRunCardProps
               ) : (
                 <span className="chat-link__muted">Review finished.</span>
               )}
+            </div>
+          )}
+        </>
+      )}
+      {run.status === 'error' && (
+        <>
+          <p className="chat-link__error">{run.error}</p>
+          <div className="chat-link__actions">
+            <button type="button" onClick={onRetry}>
+              Retry
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+interface SummaryRunCardProps {
+  run: SummaryRun;
+  noteExists: boolean;
+  onShow: () => void;
+  onRetry: () => void;
+}
+
+/** Progress of a summary request in the chat; the summary itself goes on the board. */
+function SummaryRunCard({ run, noteExists, onShow, onRetry }: SummaryRunCardProps) {
+  const what = run.selectedIds
+    ? `the ${run.selectedIds.length} selected ${run.selectedIds.length === 1 ? 'card' : 'cards'}`
+    : 'the whole board';
+  return (
+    <div className={`chat-link chat-summary is-${run.status}`}>
+      <div className="chat-link__head">
+        <span className="chat-link__label">✦ Summary</span>
+      </div>
+      {run.status === 'writing' && (
+        <p className="chat-link__progress">
+          <span className="chat-link__spinner" aria-hidden />
+          Summarising {what}…
+        </p>
+      )}
+      {run.status === 'done' && (
+        <>
+          <p>
+            {noteExists
+              ? `Added a summary note of ${what} to the board: “${run.title}”.`
+              : `The summary note “${run.title}” was deleted from the board.`}
+          </p>
+          {noteExists && (
+            <div className="chat-link__actions">
+              <button type="button" className="chat-link__primary" onClick={onShow}>
+                Show on board
+              </button>
             </div>
           )}
         </>
