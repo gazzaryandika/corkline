@@ -6,16 +6,19 @@ import type { BoardState, CardNode, RelationEdgeType } from '../state/useBoardSt
 import type { NodeTypeId } from '../types';
 import { SaveStatusIndicator } from './SaveStatusIndicator';
 import { ProjectBriefModal } from './ProjectBriefModal';
+import { goToProjects } from '../lib/route';
 import './Toolbar.css';
 
 interface ToolbarProps {
   board: BoardState;
+  /** Open the Project panel on first render (used right after creating a project). */
+  initialBriefOpen?: boolean;
 }
 
-export function Toolbar({ board }: ToolbarProps) {
+export function Toolbar({ board, initialBriefOpen = false }: ToolbarProps) {
   const { screenToFlowPosition, zoomIn, zoomOut, fitView } = useReactFlow<CardNode, RelationEdgeType>();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [briefOpen, setBriefOpen] = useState(false);
+  const [briefOpen, setBriefOpen] = useState(initialBriefOpen);
 
   const handleAdd = useCallback(
     (nodeType: NodeTypeId) => {
@@ -59,6 +62,9 @@ export function Toolbar({ board }: ToolbarProps) {
 
   return (
     <div className="toolbar">
+      <button type="button" className="group-btn" title="Back to all projects" onClick={goToProjects}>
+        ← Projects
+      </button>
       <div className="toolbar__brand">
         <span className="toolbar__mark" aria-hidden />
         CORKLINE<span> · {board.brief.name.trim() || 'opportunity map'}</span>

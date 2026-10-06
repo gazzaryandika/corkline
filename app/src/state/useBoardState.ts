@@ -3,7 +3,7 @@ import { useNodesState, useEdgesState, applyNodeChanges, type Node, type Edge, t
 import { CARD_WIDTH } from '../config';
 import { computeGapIds } from '../lib/gaps';
 import { computeParallelLanes } from '../lib/parallelEdges';
-import { loadBoard, saveBoard, downloadBoard, STORAGE_KEY } from '../lib/storage';
+import { loadBoard, saveBoard, downloadBoard, exportFilename, projectStorageKey } from '../lib/storage';
 import { seedBoard } from '../data/seed';
 import type {
   BoardDocument,
@@ -132,10 +132,10 @@ function releaseGroup(nodes: AnyNode[], groupId: string): AnyNode[] {
   return removeNodeById(released, groupId);
 }
 
-export function useBoardState() {
+export function useBoardState(projectId: string) {
   const initial = useRef<BoardDocument | null>(null);
   if (initial.current === null) {
-    initial.current = loadBoard() ?? seedBoard();
+    initial.current = loadBoard(projectId) ?? seedBoard();
   }
 
   const [nodes, setNodes] = useNodesState<AnyNode>(toRFNodes(initial.current));
@@ -199,54 +199,80 @@ export function useBoardState() {
   const saveTimer = useRef<number | undefined>(undefined);
   const skipNextSave = useRef(true); // the very first render just loaded this data; no need to re-save it immediately
 
+  /** The latest unsaved board, waiting for the debounce timer. */
+  const pendingDoc = useRef<BoardDocument | null>(null);
+
+  const writePending = useCallback(() => {
+    if (saveTimer.current !== undefined) window.clearTimeout(saveTimer.current);
+    saveTimer.current = undefined;
+    const doc = pendingDoc.current;
+    if (!doc) return;
+    pendingDoc.current = null;
+    const result = saveBoard(projectId, doc);
+    if (result.ok) {
+      setSaveStatus('saved');
+      setSaveError(null);
+    } else {
+      setSaveStatus('error');
+      setSaveError(result.reason);
+    }
+  }, [projectId]);
+
   useEffect(() => {
     if (skipNextSave.current) {
       skipNextSave.current = false;
       return;
     }
     setSaveStatus('saving');
+    pendingDoc.current = toDocument(nodes, edges, brief);
     if (saveTimer.current !== undefined) window.clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(() => {
-      const result = saveBoard(toDocument(nodes, edges, brief));
-      if (result.ok) {
-        setSaveStatus('saved');
-        setSaveError(null);
-      } else {
-        setSaveStatus('error');
-        setSaveError(result.reason);
-      }
-    }, SAVE_DEBOUNCE_MS);
-    return () => {
-      if (saveTimer.current !== undefined) window.clearTimeout(saveTimer.current);
-    };
+    saveTimer.current = window.setTimeout(writePending, SAVE_DEBOUNCE_MS);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes, edges, brief]);
+
+  // Write any pending change straight away when leaving the board (e.g. back to the
+  // projects page) or closing the tab, instead of losing the last half-second of edits.
+  useEffect(() => {
+    window.addEventListener('pagehide', writePending);
+    return () => {
+      window.removeEventListener('pagehide', writePending);
+      writePending();
+    };
+  }, [writePending]);
 
   // ---- cross-tab awareness ----
   useEffect(() => {
     function handleStorage(e: StorageEvent) {
-      if (e.key === STORAGE_KEY && e.newValue) setCrossTabNotice(true);
+      if (e.key === projectStorageKey(projectId) && e.newValue) setCrossTabNotice(true);
     }
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
-  }, []);
+  }, [projectId]);
 
   const importDocument = useCallback(
     (doc: BoardDocument) => {
+      // Replace the board wholesale: drop any older pending save so it can't
+      // overwrite this, and persist the new board right away.
+      if (saveTimer.current !== undefined) window.clearTimeout(saveTimer.current);
+      saveTimer.current = undefined;
+      pendingDoc.current = null;
+      const result = saveBoard(projectId, doc);
+      setSaveStatus(result.ok ? 'saved' : 'error');
+      setSaveError(result.ok ? null : result.reason);
       skipNextSave.current = true;
       groupsFittedOnLoad.current = false;
       setNodes(toRFNodes(doc));
       setBrief({ ...EMPTY_BRIEF, ...doc.brief });
       setEdges(doc.edges.map((e) => ({ id: e.id, type: 'relation', source: e.source, target: e.target, data: { ...e.data } })));
     },
-    [setNodes, setEdges],
+    [setNodes, setEdges, projectId],
   );
 
   const reloadFromStorage = useCallback(() => {
-    const doc = loadBoard();
+    const doc = loadBoard(projectId);
     if (doc) importDocument(doc);
     setCrossTabNotice(false);
-  }, [importDocument]);
+  }, [importDocument, projectId]);
 
   const resetToExample = useCallback(() => {
     importDocument(seedBoard());
@@ -360,7 +386,7 @@ export function useBoardState() {
   );
 
   const exportBoard = useCallback(() => {
-    downloadBoard(toDocument(nodes, edges, brief));
+    downloadBoard(toDocument(nodes, edges, brief), exportFilename(brief.name));
   }, [nodes, edges, brief]);
 
   const updateBrief = useCallback((patch: Partial<ProjectBrief>) => {

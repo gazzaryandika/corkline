@@ -60,6 +60,20 @@ Open decisions / next steps:
    `ProjectBrief` in `app/src/types.ts`, and `describeBrief()` in `app/src/ai/boardContext.ts`.
    The example board ships with a pre-filled Triodos Kids brief (`SEED_BRIEF` in `app/src/data/seed.ts`),
    summarised from the board's own cards; the user should check it for accuracy.
+1b. **Projects page — done (2026-10-06).** The app now opens on a Projects page (`#/`); each board is a
+   project (`#/project/<id>`).
+   - Actions: New project (blank, opens the Project panel to name it), From example (Triodos board),
+     Import (JSON → new project), Duplicate, Export, and Delete (with a click-again confirm).
+   - The board toolbar has a **← Projects** button.
+   - Storage is **this browser only** (the user's choice): the project list is under
+     `corkline-projects-v1`, and each board under `corkline-project:<id>`.
+   - On first run, the old single board (`corkline-board-v2`) was copied into the first project and left
+     in place as a backup.
+   - Fixed while building this: edits made in the half-second before leaving a board were lost. Pending
+     saves are now written on leave/tab close, and Reset/Import saves immediately.
+   - Files: `app/src/pages/ProjectsPage.tsx`, `app/src/lib/route.ts`, `app/src/BoardScreen.tsx`, and the
+     project functions in `app/src/lib/storage.ts`.
+   - A shared online database (team access) was considered and deferred.
 2. **Should the AI change the board?** The options are to stay read-only, or to have it propose changes
    (new card or link) that the user Accepts or Rejects. The second bends the "AI doesn't add ideas"
    rule, and it's the user's call.

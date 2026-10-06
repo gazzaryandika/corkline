@@ -56,6 +56,18 @@ as part of the new architecture rather than patched on top of the old code:
 - Editing in one browser tab now warns you if the board changed in another tab, instead of one tab
   silently overwriting the other's work on next save.
 
+## Projects
+
+The app opens on a **Projects page** listing every project, with New, From example, Import, Duplicate,
+Export and Delete. Each project has its own board and Project brief. Everything is stored in this
+browser's localStorage only, so use Export to back a project up or move it to another computer.
+
+- `src/pages/ProjectsPage.tsx`: the projects page.
+- `src/lib/route.ts`: a tiny hash router (`#/` for projects, `#/project/<id>` for a board).
+- `src/BoardScreen.tsx`: one project's board (toolbar, canvas, legend, chat).
+- `src/lib/storage.ts`: the project list plus a per-project board, and a one-time migration of the old
+  single board.
+
 ## AI (Google Gemini)
 
 The AI Assistant panel (bottom left) has two modes:
