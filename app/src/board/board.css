@@ -1,0 +1,191 @@
+.board-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.board-canvas .react-flow {
+  background: radial-gradient(ellipse 1400px 900px at 50% 0%, #fdfcfa 0%, var(--canvas-bg) 60%);
+}
+
+.board-canvas .react-flow__attribution {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  background: transparent;
+}
+
+@keyframes dash-flow {
+  to {
+    stroke-dashoffset: -32;
+  }
+}
+@keyframes tension-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.relation-edge-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 16px;
+  cursor: pointer;
+  pointer-events: stroke;
+}
+
+.relation-edge-hit:hover + .relation-edge {
+  stroke-width: 3;
+  filter: drop-shadow(0 0 6px currentColor);
+}
+
+.relation-edge {
+  stroke-dasharray: 9 7;
+  animation: dash-flow 1s linear infinite;
+  transition: opacity 0.18s ease;
+  /* Purely decorative — .relation-edge-hit (rendered just behind it, same
+     path) owns all pointer/hover handling so the hover glow triggers
+     consistently across the whole stroke corridor, not just beside it. */
+  pointer-events: none;
+}
+.relation-edge.is-contradicts {
+  stroke-dasharray: 4 5;
+  animation: tension-pulse 1.4s ease-in-out infinite;
+}
+
+.relation-edge.is-focus-dim {
+  opacity: 0.15;
+}
+
+.relation-edge.is-focus-highlight {
+  stroke-width: 3;
+}
+
+.relation-edge__label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.18s ease, box-shadow 0.18s ease;
+}
+
+.relation-edge__label.is-focus-dim {
+  opacity: 0.25;
+}
+
+.relation-edge__label.is-focus-highlight {
+  box-shadow: var(--shadow-sm), 0 0 10px 1px color-mix(in srgb, currentColor 60%, transparent);
+}
+
+.edge-kind-menu {
+  position: fixed;
+  z-index: 110;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: menu-in 0.12s ease-out;
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.edge-kind-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 7px 10px;
+  border-radius: 6px;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.edge-kind-menu button:hover {
+  background: var(--surface-muted);
+}
+.edge-kind-menu__swatch {
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.connection-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+.connection-overlay__path {
+  fill: none;
+  stroke-width: 2;
+  stroke-dasharray: 5 5;
+}
+
+.connect-hint {
+  position: absolute;
+  left: 50%;
+  top: 14px;
+  transform: translateX(-50%);
+  z-index: 90;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  box-shadow: var(--shadow-md);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
+  color: var(--text);
+  animation: menu-in 0.12s ease-out;
+}
+.connect-hint b {
+  font-weight: 700;
+}
+.connect-hint__esc {
+  font-size: 9px;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  letter-spacing: 0.05em;
+}

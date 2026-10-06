@@ -1,0 +1,104 @@
+/* React Flow's base stylesheet gives every `type: "group"` node a default solid
+   border, white background, fixed width, and padding (meant for its own built-in
+   group node). We render our own frame entirely via .group-frame below, so all of
+   that needs clearing here — otherwise it shows through as a second, slightly
+   misaligned rectangle behind our dashed one. */
+.react-flow__node-group {
+  pointer-events: none;
+  border: none;
+  background: none;
+  padding: 0;
+  width: auto;
+  font-size: inherit;
+  color: inherit;
+  text-align: left;
+  border-radius: 0;
+}
+
+.react-flow__node-group.selectable.selected,
+.react-flow__node-group.selectable:focus,
+.react-flow__node-group.selectable:focus-visible {
+  box-shadow: none;
+}
+
+.group-frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border: 2px dashed var(--border);
+  border-radius: 16px;
+  background: rgba(28, 25, 23, 0.025);
+  transition: border-color 0.15s ease, background 0.15s ease, opacity 0.18s ease, filter 0.18s ease;
+}
+
+.group-frame.is-selected {
+  border-color: var(--text);
+  background: rgba(28, 25, 23, 0.045);
+}
+
+.group-frame.is-focus-highlight {
+  border-color: var(--text);
+  background: rgba(28, 25, 23, 0.045);
+  box-shadow: 0 0 20px 2px rgba(28, 25, 23, 0.12);
+}
+
+.group-frame.is-focus-dim {
+  opacity: 0.3;
+  filter: saturate(0.7);
+}
+
+.group-frame__header {
+  position: absolute;
+  top: 10px;
+  left: 14px;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: auto;
+  cursor: grab;
+}
+.group-frame__header:active {
+  cursor: grabbing;
+}
+
+.group-frame__label {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 3px 0;
+}
+.group-frame__label::placeholder {
+  color: var(--text-faint);
+}
+
+.group-frame__remove {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-sm);
+  opacity: 0.7;
+}
+.group-frame__remove:hover {
+  opacity: 1;
+  color: var(--text);
+}

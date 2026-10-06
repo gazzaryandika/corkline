@@ -1,0 +1,874 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Corkline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#f7f4ec;
+    --paper-dot:#e4ddca;
+    --ink:#2a271f;
+    --ink-dim:#8b8574;
+    --chrome-bg:#fffdf7;
+    --chrome-border:#ddd5bf;
+    --shadow:rgba(42,39,31,0.18);
+    --accent:#2a271f;
+    --font-sans:'Inter',system-ui,-apple-system,sans-serif;
+    --font-mono:'IBM Plex Mono',ui-monospace,'SF Mono',Consolas,monospace;
+
+    --c-problem:#d8432f;
+    --c-evidence:#1f9e8f;
+    --c-insight:#8b5cf6;
+    --c-opportunity:#e08a1e;
+    --c-direction:#2f9e57;
+    --c-prototype:#e0459b;
+    --c-assumption:#4f6fe0;
+    --c-gap:#e08a1e;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:var(--paper);font-family:var(--font-sans);color:var(--ink);overflow:hidden;}
+
+  /* -------- toolbar -------- */
+  #toolbar{
+    position:fixed; top:0; left:0; right:0; z-index:100;
+    display:flex; align-items:center; gap:14px;
+    padding:10px 16px;
+    background:var(--chrome-bg); border-bottom:1px solid var(--chrome-border);
+    box-shadow:0 2px 10px var(--shadow);
+  }
+  #toolbar .brand{
+    font-family:var(--font-mono); font-weight:700; font-size:14px; letter-spacing:.02em;
+    padding-right:12px; border-right:1px solid var(--chrome-border);
+  }
+  #toolbar .brand span{color:var(--ink-dim); font-weight:400;}
+  #addGroup{display:flex; gap:6px; flex-wrap:wrap;}
+  .add-btn{
+    display:flex; align-items:center; gap:6px;
+    border:1px solid var(--chrome-border); background:var(--chrome-bg);
+    border-radius:7px; padding:5px 10px 5px 8px; cursor:pointer;
+    font-family:var(--font-mono); font-size:11px; font-weight:600; letter-spacing:.01em;
+    color:var(--ink); transition:transform .1s, box-shadow .1s;
+  }
+  .add-btn:hover{ transform:translateY(-1px); box-shadow:0 3px 8px var(--shadow); }
+  .add-btn .dot{width:9px;height:9px;border-radius:50%;flex:none;}
+  #toolbar .spacer{flex:1;}
+  #gapPill{
+    font-family:var(--font-mono); font-size:11px; font-weight:600;
+    padding:5px 11px; border-radius:20px; border:1px solid var(--chrome-border);
+    color:var(--ink-dim); background:var(--chrome-bg);
+    transition:color .2s, border-color .2s, background .2s;
+  }
+  #gapPill.has-gaps{ color:#8a4b0a; border-color:var(--c-gap); background:#fdf1de; }
+  .zoom-group{display:flex; gap:4px; align-items:center; margin-left:6px;}
+  .icon-btn{
+    width:28px; height:28px; border-radius:6px; border:1px solid var(--chrome-border);
+    background:var(--chrome-bg); cursor:pointer; font-family:var(--font-mono); font-size:14px;
+    color:var(--ink); display:flex; align-items:center; justify-content:center;
+  }
+  .icon-btn:hover{ background:var(--paper); }
+
+  /* -------- board -------- */
+  #boardViewport{
+    position:absolute; inset:0; top:52px; overflow:hidden; cursor:grab;
+    background-image:radial-gradient(var(--paper-dot) 1.4px, transparent 1.4px);
+    background-size:26px 26px;
+  }
+  #boardViewport.panning{ cursor:grabbing; }
+  #world{
+    position:absolute; left:0; top:0; width:1px; height:1px;
+    transform-origin:0 0;
+  }
+  #edgesSvg{ position:absolute; left:0; top:0; overflow:visible; pointer-events:none; }
+  #tempEdge{ fill:none; stroke:var(--ink-dim); stroke-width:2; stroke-dasharray:5 5; pointer-events:none; }
+  .is-hidden{ display:none !important; }
+
+  @keyframes dashFlow{ to{ stroke-dashoffset:-32; } }
+  @keyframes tensionPulse{ 0%,100%{ opacity:.55; } 50%{ opacity:1; } }
+  .edge-line{ stroke-dasharray:9 7; animation:dashFlow 1s linear infinite; }
+  .edge-line.contradicts{ animation:tensionPulse 1.4s ease-in-out infinite; stroke-dasharray:4 5; }
+
+  /* -------- node card -------- */
+  .node{
+    position:absolute; width:240px;
+    background:var(--chrome-bg);
+    border:1px solid var(--chrome-border); border-left:5px solid var(--type-c);
+    border-radius:9px;
+    box-shadow:0 3px 10px var(--shadow);
+    user-select:none;
+    transition:box-shadow .15s;
+  }
+  .node.dragging{ box-shadow:0 10px 26px var(--shadow); z-index:50; }
+  .node-bar{
+    display:flex; align-items:center; justify-content:space-between;
+    background:var(--type-c); border-radius:5px 5px 0 0;
+    padding:5px 6px 5px 10px; cursor:grab;
+  }
+  .node-bar:active{ cursor:grabbing; }
+  .node-badge{
+    font-family:var(--font-mono); font-size:9.5px; font-weight:700; letter-spacing:.08em;
+    color:#fff; text-transform:uppercase;
+  }
+  .node-del{
+    width:18px; height:18px; border-radius:4px; border:none; cursor:pointer;
+    background:rgba(255,255,255,.22); color:#fff; font-size:12px; line-height:1;
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--font-mono);
+  }
+  .node-del:hover{ background:rgba(255,255,255,.4); }
+  .node-del.confirm{ background:#fff; color:#b02a1f; font-weight:700; }
+  .node-body{ padding:9px 11px 11px; }
+  .node-title{
+    font-weight:600; font-size:13px; line-height:1.3; margin-bottom:4px;
+    outline:none; cursor:text; min-height:1.3em;
+  }
+  .node-title:empty:before{ content:attr(data-ph); color:var(--ink-dim); font-weight:500; }
+  .node-text{
+    font-size:11.5px; line-height:1.45; color:#4a4636; outline:none; cursor:text; min-height:1.4em;
+  }
+  .node-text:empty:before{ content:attr(data-ph); color:var(--ink-dim); }
+
+  /* -------- connector -------- */
+  .connector{
+    position:absolute; right:-13px; top:50%; margin-top:-13px;
+    width:26px; height:26px; border-radius:50%;
+    background:transparent; border:none;
+    cursor:crosshair;
+    display:flex; align-items:center; justify-content:center;
+    transition:transform .12s;
+  }
+  .connector::before{
+    content:''; width:16px; height:16px; border-radius:50%;
+    background:var(--paper); border:2px solid var(--type-c);
+    transition:background .12s, transform .12s;
+  }
+  .connector::after{
+    content:''; position:absolute; width:5px; height:5px; border-radius:50%;
+    background:var(--type-c); pointer-events:none;
+  }
+  .connector:hover::before, .connector:focus-visible::before{ background:var(--type-c); transform:scale(1.15); }
+  .connector:hover::after, .connector:focus-visible::after{ background:var(--paper); }
+  .node:hover .connector::before{ box-shadow:0 0 0 4px color-mix(in srgb, var(--type-c) 22%, transparent); }
+
+  .node.connect-source{ box-shadow:0 0 0 3px var(--type-c), 0 6px 16px var(--shadow); }
+  .node.connect-source .connector::before{ background:var(--type-c); }
+
+  /* -------- gap flag -------- */
+  .node.gap{ box-shadow:0 0 0 2px var(--c-gap), 0 3px 10px var(--shadow); animation:gapGlow 2.2s ease-in-out infinite; }
+  @keyframes gapGlow{
+    0%,100%{ box-shadow:0 0 0 2px var(--c-gap), 0 3px 10px var(--shadow); }
+    50%{ box-shadow:0 0 0 4px var(--c-gap), 0 3px 10px var(--shadow); }
+  }
+  .gap-tag{
+    display:none; align-items:center; gap:4px;
+    margin-top:7px; padding:3px 7px; border-radius:5px;
+    background:#fdf1de; color:#8a4b0a; border:1px solid var(--c-gap);
+    font-family:var(--font-mono); font-size:9.5px; font-weight:700; letter-spacing:.04em;
+  }
+  .node.gap .gap-tag{ display:flex; }
+
+  body.connecting #boardViewport{ cursor:crosshair; }
+  body.connecting .node{ cursor:crosshair; }
+
+  #connectHint{
+    position:fixed; left:50%; top:64px; transform:translateX(-50%);
+    z-index:90;
+    background:var(--chrome-bg); color:var(--ink);
+    border:1px solid var(--chrome-border);
+    border-radius:20px;
+    padding:7px 14px;
+    font-family:var(--font-mono); font-size:11px; letter-spacing:.02em;
+    box-shadow:0 8px 20px var(--shadow);
+    display:flex; align-items:center; gap:10px;
+    pointer-events:none;
+  }
+  #connectHint b{ color:var(--hint-c, var(--accent)); }
+  #connectHint .esc{
+    font-size:9px; color:var(--ink-dim); border:1px solid var(--chrome-border);
+    border-radius:3px; padding:1px 5px; letter-spacing:.05em;
+  }
+
+  /* -------- edge kind popup -------- */
+  #edgePopup{
+    position:fixed; z-index:110; background:var(--chrome-bg);
+    border:1px solid var(--chrome-border); border-radius:10px;
+    box-shadow:0 12px 28px var(--shadow); padding:6px; display:flex; flex-direction:column; gap:2px;
+  }
+  #edgePopup button{
+    display:flex; align-items:center; gap:8px;
+    border:none; background:transparent; cursor:pointer;
+    padding:7px 10px; border-radius:6px; text-align:left;
+    font-family:var(--font-mono); font-size:11.5px; font-weight:600; color:var(--ink);
+  }
+  #edgePopup button:hover{ background:var(--paper); }
+  #edgePopup .swatch{ width:16px; height:3px; border-radius:2px; flex:none; }
+
+  /* -------- legend -------- */
+  #legend{
+    position:fixed; right:14px; bottom:14px; z-index:80;
+    width:238px; background:var(--chrome-bg); border:1px solid var(--chrome-border);
+    border-radius:10px; box-shadow:0 8px 24px var(--shadow);
+    font-family:var(--font-mono); font-size:10.5px;
+    max-height:calc(100vh - 90px); overflow:auto;
+  }
+  #legend .lg-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:9px 11px; border-bottom:1px solid var(--chrome-border);
+    font-weight:700; letter-spacing:.04em; cursor:pointer;
+  }
+  #legend .lg-body{ padding:10px 11px 12px; }
+  #legend.collapsed .lg-body{ display:none; }
+  #legend h4{ margin:10px 0 5px; font-size:9.5px; color:var(--ink-dim); letter-spacing:.06em; text-transform:uppercase; }
+  #legend h4:first-child{ margin-top:0; }
+  .lg-row{ display:flex; align-items:center; gap:7px; padding:2.5px 0; }
+  .lg-row .dot{ width:9px; height:9px; border-radius:50%; flex:none; }
+  .lg-row .line{ width:18px; height:0; border-top:2px dashed; flex:none; }
+  .lg-note{ margin-top:9px; color:var(--ink-dim); line-height:1.5; font-size:9.5px; }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <div class="brand">CORKLINE <span>· opportunity map</span></div>
+  <div id="addGroup"></div>
+  <div class="spacer"></div>
+  <div id="gapPill">0 gaps</div>
+  <div class="zoom-group">
+    <button class="icon-btn" id="btnZoomOut" title="Zoom out">−</button>
+    <button class="icon-btn" id="btnZoomIn" title="Zoom in">+</button>
+    <button class="icon-btn" id="btnReset" title="Reset view">⤾</button>
+  </div>
+</div>
+
+<div id="boardViewport">
+  <div id="world">
+    <svg id="edgesSvg">
+      <defs id="edgeDefs"></defs>
+      <path id="tempEdge" class="is-hidden"></path>
+    </svg>
+  </div>
+</div>
+
+<div id="connectHint" class="is-hidden"></div>
+<div id="edgePopup" class="is-hidden"></div>
+
+<div id="legend">
+  <div class="lg-head" id="legendToggle"><span>LEGEND</span><span id="legendChevron">▾</span></div>
+  <div class="lg-body">
+    <h4>Node types</h4>
+    <div id="lgTypes"></div>
+    <h4>Connections</h4>
+    <div id="lgEdges"></div>
+    <div class="lg-row" style="margin-top:4px;">
+      <span class="dot" style="background:var(--c-gap);"></span>
+      <span>Amber glow = nothing feeds into this node yet</span>
+    </div>
+    <div class="lg-note">
+      Click the dot on a card's edge, then click another card to link them — or drag the dot straight onto a target. Esc cancels. Click a line's label twice to delete it.
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+
+  var CARD_W = 240;
+  var SVGNS = 'http://www.w3.org/2000/svg';
+
+  var TYPES = {
+    problem:     { label:'Problem',     short:'PROB', color:'var(--c-problem)',     hex:'#d8432f', ph:'State the problem or design challenge…', needsIncoming:false },
+    evidence:    { label:'Evidence',    short:'EVID', color:'var(--c-evidence)',    hex:'#1f9e8f', ph:'A quote, observation, artefact or data point…', needsIncoming:false },
+    insight:     { label:'Insight',     short:'INS',  color:'var(--c-insight)',     hex:'#8b5cf6', ph:'What does this mean? An interpretation…', needsIncoming:true },
+    opportunity: { label:'Opportunity', short:'OPP',  color:'var(--c-opportunity)', hex:'#e08a1e', ph:'How might we…', needsIncoming:true },
+    direction:   { label:'Direction',   short:'DIR',  color:'var(--c-direction)',   hex:'#2f9e57', ph:'A concept or route worth developing…', needsIncoming:true },
+    prototype:   { label:'Prototype',   short:'PROT', color:'var(--c-prototype)',   hex:'#e0459b', ph:'What was built or tested, and how…', needsIncoming:true },
+    assumption:  { label:'Assumption',  short:'ASM',  color:'var(--c-assumption)',  hex:'#4f6fe0', ph:'What are we taking for granted?…', needsIncoming:false }
+  };
+
+  var EDGE_KINDS = {
+    leads:       { label:'Leads to',    color:'#8b8574', cls:'leads',       arrow:true  },
+    supports:    { label:'Supports',    color:'#2f9e57', cls:'supports',    arrow:true  },
+    tests:       { label:'Tests',       color:'#4f6fe0', cls:'tests',       arrow:true  },
+    contradicts: { label:'Contradicts', color:'#d8432f', cls:'contradicts', arrow:false }
+  };
+
+  var els = {
+    toolbar: document.getElementById('toolbar'),
+    addGroup: document.getElementById('addGroup'),
+    viewport: document.getElementById('boardViewport'),
+    world: document.getElementById('world'),
+    svg: document.getElementById('edgesSvg'),
+    defs: document.getElementById('edgeDefs'),
+    tempEdge: document.getElementById('tempEdge'),
+    connectHint: document.getElementById('connectHint'),
+    edgePopup: document.getElementById('edgePopup'),
+    gapPill: document.getElementById('gapPill'),
+    lgTypes: document.getElementById('lgTypes'),
+    lgEdges: document.getElementById('lgEdges'),
+    legend: document.getElementById('legend'),
+    legendToggle: document.getElementById('legendToggle'),
+    legendChevron: document.getElementById('legendChevron')
+  };
+
+  var nodeEls = {};
+  var uidCounter = 1;
+  function uid(prefix){ return prefix + (uidCounter++); }
+
+  var state = { nodes: [], edges: [] };
+
+  function seed(){
+    var n = [
+      { id:'p1', type:'problem',     x:40,  y:260, title:'Patients wait without knowing why', body:'Root problem for this case: a hospital outpatient waiting room.' },
+      { id:'e1', type:'evidence',    x:400, y:60,  title:'Reception, field quote', body:'"We can’t tell them the delay — it’s not our call."' },
+      { id:'e2', type:'evidence',    x:400, y:230, title:'Waiting room observation', body:'No patient checked the wall clock after minute 12 — they’d stopped expecting an update.' },
+      { id:'e3', type:'evidence',    x:400, y:400, title:'Exit survey, n=41', body:'62% said they’d rather wait longer with updates than wait less in silence.' },
+      { id:'i1', type:'insight',     x:740, y:100, title:'Silence reads as neglect', body:'Not being told the delay is read as the system not caring, not as a busy system.' },
+      { id:'i2', type:'insight',     x:740, y:320, title:'Patients disengage over time', body:'Once trust in being informed drops, patients stop tracking time altogether.' },
+      { id:'o1', type:'opportunity', x:1080, y:200, title:'HMW: share a delay without asking permission?', body:'Give reception a way to communicate delay that doesn’t need a supervisor each time.' },
+      { id:'o2', type:'opportunity', x:1080, y:420, title:'HMW: redesign the waiting room itself?', body:'Physical layout as a separate lever — not yet linked to any insight.' },
+      { id:'d1', type:'direction',   x:1420, y:200, title:'Tiered delay phrases', body:'Pre-scripted, tiered phrases reception can use without escalating.' },
+      { id:'a1', type:'assumption',  x:1420, y:420, title:'Patients would rather not know bad news', body:'Untested belief behind why reception withholds delay info.' }
+    ];
+    n.forEach(function(node){
+      state.nodes.push(node);
+    });
+    state.edges = [
+      { id:uid('edge'), from:'e1', to:'i1', kind:'supports' },
+      { id:uid('edge'), from:'e2', to:'i1', kind:'supports' },
+      { id:uid('edge'), from:'i1', to:'o1', kind:'leads' },
+      { id:uid('edge'), from:'i2', to:'o1', kind:'leads' },
+      { id:uid('edge'), from:'e2', to:'i2', kind:'supports' },
+      { id:uid('edge'), from:'o1', to:'d1', kind:'leads' },
+      { id:uid('edge'), from:'d1', to:'a1', kind:'tests' },
+      { id:uid('edge'), from:'e3', to:'a1', kind:'contradicts' }
+    ];
+  }
+
+  function save(){
+    try{ localStorage.setItem('corkline-state', JSON.stringify(state)); }catch(e){}
+  }
+  function load(){
+    try{
+      var raw = localStorage.getItem('corkline-state');
+      if(raw){ var parsed = JSON.parse(raw); if(parsed && parsed.nodes && parsed.nodes.length){ state = parsed; return true; } }
+    }catch(e){}
+    return false;
+  }
+
+  function getNode(id){
+    for(var i=0;i<state.nodes.length;i++){ if(state.nodes[i].id===id) return state.nodes[i]; }
+    return null;
+  }
+
+  // ---------------- pan / zoom ----------------
+  var pan = { x:-40, y:-40 };
+  var zoom = 1;
+  function applyTransform(){
+    els.world.style.transform = 'translate('+pan.x+'px,'+pan.y+'px) scale('+zoom+')';
+  }
+  var panState = null;
+  els.viewport.addEventListener('pointerdown', function(e){
+    if(e.target.closest('.node')) return;
+    if(connectSource){ disarmConnect(); return; }
+    panState = { startX:e.clientX, startY:e.clientY, origX:pan.x, origY:pan.y, pid:e.pointerId };
+    els.viewport.setPointerCapture(e.pointerId);
+    els.viewport.classList.add('panning');
+  });
+  els.viewport.addEventListener('pointermove', function(e){
+    if(!panState) return;
+    pan.x = panState.origX + (e.clientX - panState.startX);
+    pan.y = panState.origY + (e.clientY - panState.startY);
+    applyTransform();
+  });
+  els.viewport.addEventListener('pointerup', function(e){
+    if(!panState) return;
+    try{ els.viewport.releasePointerCapture(panState.pid); }catch(err){}
+    panState = null;
+    els.viewport.classList.remove('panning');
+  });
+  els.viewport.addEventListener('wheel', function(e){
+    e.preventDefault();
+    var rect = els.viewport.getBoundingClientRect();
+    var mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    var wx = (mx - pan.x)/zoom, wy = (my - pan.y)/zoom;
+    var factor = e.deltaY < 0 ? 1.08 : 0.93;
+    zoom = Math.min(2.4, Math.max(0.35, zoom*factor));
+    pan.x = mx - wx*zoom;
+    pan.y = my - wy*zoom;
+    applyTransform();
+  }, { passive:false });
+  document.getElementById('btnZoomIn').addEventListener('click', function(){ zoomStep(1.15); });
+  document.getElementById('btnZoomOut').addEventListener('click', function(){ zoomStep(0.87); });
+  function zoomStep(factor){
+    var rect = els.viewport.getBoundingClientRect();
+    var mx = rect.width/2, my = rect.height/2;
+    var wx = (mx-pan.x)/zoom, wy=(my-pan.y)/zoom;
+    zoom = Math.min(2.4, Math.max(0.35, zoom*factor));
+    pan.x = mx - wx*zoom; pan.y = my - wy*zoom;
+    applyTransform();
+  }
+  document.getElementById('btnReset').addEventListener('click', function(){
+    pan = { x:-40, y:-40 }; zoom = 1; applyTransform();
+  });
+
+  // ---------------- geometry ----------------
+  function nodeCenter(node, side){
+    var el = nodeEls[node.id];
+    var h = el ? el.offsetHeight : 96;
+    var x = node.x + (side==='left' ? 0 : side==='right' ? CARD_W : CARD_W/2);
+    var y = node.y + h/2;
+    return { x:x, y:y };
+  }
+  function bezierPath(x1,y1,x2,y2){
+    var dx = Math.max(60, Math.abs(x2-x1)*0.5);
+    return 'M'+x1+','+y1+' C'+(x1+dx)+','+y1+' '+(x2-dx)+','+y2+' '+x2+','+y2;
+  }
+  function bezierMid(x1,y1,x2,y2){
+    var dx = Math.max(60, Math.abs(x2-x1)*0.5);
+    var c1x=x1+dx, c1y=y1, c2x=x2-dx, c2y=y2;
+    return { x:(x1+3*c1x+3*c2x+x2)/8, y:(y1+3*c1y+3*c2y+y2)/8 };
+  }
+
+  // ---------------- connecting nodes ----------------
+  // Two ways to connect: drag the dot straight onto a target and release,
+  // or click the dot once (arms it) then click any other node to finish —
+  // far more reliable than a precise drag, especially on a trackpad.
+  var connectSource = null;
+  var connectSourceEl = null;
+
+  function worldPointFromEvent(e){
+    var rect = els.viewport.getBoundingClientRect();
+    return { x:(e.clientX-rect.left-pan.x)/zoom, y:(e.clientY-rect.top-pan.y)/zoom };
+  }
+  function findNodeUnderPoint(clientX, clientY, excludeId){
+    var stack = document.elementsFromPoint(clientX, clientY);
+    for(var i=0;i<stack.length;i++){
+      var elx = stack[i].closest ? stack[i].closest('.node') : null;
+      if(elx && elx.dataset.id !== excludeId){ return getNode(elx.dataset.id); }
+    }
+    return null;
+  }
+  function hintHTML(node){
+    var cfg = TYPES[node.type];
+    return '<span style="--hint-c:'+cfg.hex+'">Connecting from <b>'+cfg.short+'</b> — click the node to link to</span><span class="esc">esc</span>';
+  }
+  function armConnect(node, el){
+    if(connectSourceEl){ connectSourceEl.classList.remove('connect-source'); }
+    connectSource = node;
+    connectSourceEl = el;
+    el.classList.add('connect-source');
+    document.body.classList.add('connecting');
+    els.connectHint.innerHTML = hintHTML(node);
+    els.connectHint.classList.remove('is-hidden');
+    var start = nodeCenter(node,'right');
+    els.tempEdge.setAttribute('d', bezierPath(start.x,start.y,start.x,start.y));
+    els.tempEdge.classList.remove('is-hidden');
+  }
+  function disarmConnect(){
+    if(connectSourceEl){ connectSourceEl.classList.remove('connect-source'); }
+    connectSource = null;
+    connectSourceEl = null;
+    document.body.classList.remove('connecting');
+    els.connectHint.classList.add('is-hidden');
+    els.tempEdge.classList.add('is-hidden');
+    els.tempEdge.removeAttribute('d');
+  }
+  window.addEventListener('pointermove', function(e){
+    if(!connectSource) return;
+    var p = worldPointFromEvent(e);
+    var start = nodeCenter(connectSource,'right');
+    els.tempEdge.setAttribute('d', bezierPath(start.x,start.y,p.x,p.y));
+  });
+  window.addEventListener('pointerup', function(e){
+    if(!connectSource) return;
+    var target = findNodeUnderPoint(e.clientX, e.clientY, connectSource.id);
+    if(target){
+      openEdgePopup(connectSource, target, e.clientX, e.clientY);
+      disarmConnect();
+    }
+  });
+  window.addEventListener('keydown', function(e){
+    if(e.key==='Escape' && connectSource){ disarmConnect(); }
+    if(e.key==='Escape'){ closeEdgePopup(); }
+  });
+
+  // ---------------- edge kind popup ----------------
+  var pendingEdge = null;
+  function openEdgePopup(fromNode, toNode, clientX, clientY){
+    pendingEdge = { from:fromNode.id, to:toNode.id };
+    els.edgePopup.innerHTML = '';
+    Object.keys(EDGE_KINDS).forEach(function(key){
+      var cfg = EDGE_KINDS[key];
+      var btn = document.createElement('button');
+      btn.innerHTML = '<span class="swatch" style="background:'+cfg.color+'"></span>'+cfg.label;
+      btn.addEventListener('click', function(){
+        addEdge(fromNode.id, toNode.id, key);
+        closeEdgePopup();
+      });
+      els.edgePopup.appendChild(btn);
+    });
+    var pw = 168, ph = Object.keys(EDGE_KINDS).length*32+14;
+    var x = Math.min(clientX+8, window.innerWidth-pw-8);
+    var y = Math.min(clientY+8, window.innerHeight-ph-8);
+    els.edgePopup.style.left = x+'px';
+    els.edgePopup.style.top = y+'px';
+    els.edgePopup.classList.remove('is-hidden');
+    setTimeout(function(){ window.addEventListener('pointerdown', outsidePopupClose); }, 0);
+  }
+  function outsidePopupClose(e){
+    if(!els.edgePopup.contains(e.target)){ closeEdgePopup(); }
+  }
+  function closeEdgePopup(){
+    els.edgePopup.classList.add('is-hidden');
+    pendingEdge = null;
+    window.removeEventListener('pointerdown', outsidePopupClose);
+  }
+
+  // ---------------- data ops ----------------
+  function addNode(type){
+    var rect = els.viewport.getBoundingClientRect();
+    var center = worldPointFromEvent({ clientX: rect.left+rect.width/2, clientY: rect.top+rect.height/2 });
+    var jitter = (Math.random()-0.5)*70;
+    var node = {
+      id: uid(type.slice(0,2)),
+      type: type,
+      x: center.x - CARD_W/2 + jitter,
+      y: center.y - 50 + jitter,
+      title: '', body: ''
+    };
+    state.nodes.push(node);
+    buildNodeEl(node);
+    recomputeGaps();
+    save();
+    var el = nodeEls[node.id];
+    var titleEl = el.querySelector('.node-title');
+    titleEl.focus();
+  }
+  function removeNode(id){
+    state.edges = state.edges.filter(function(ed){ return ed.from!==id && ed.to!==id; });
+    state.nodes = state.nodes.filter(function(n){ return n.id!==id; });
+    if(nodeEls[id]){ nodeEls[id].remove(); delete nodeEls[id]; }
+    if(connectSource && connectSource.id===id){ disarmConnect(); }
+    renderEdgesOnly();
+    recomputeGaps();
+    save();
+  }
+  function addEdge(fromId, toId, kind){
+    if(fromId===toId) return;
+    var exists = state.edges.some(function(ed){ return ed.from===fromId && ed.to===toId && ed.kind===kind; });
+    if(exists) return;
+    state.edges.push({ id:uid('edge'), from:fromId, to:toId, kind:kind });
+    renderEdgesOnly();
+    recomputeGaps();
+    save();
+  }
+  function removeEdgeById(id){
+    state.edges = state.edges.filter(function(ed){ return ed.id!==id; });
+    renderEdgesOnly();
+    recomputeGaps();
+    save();
+  }
+
+  // ---------------- gap detection ----------------
+  function recomputeGaps(){
+    var incoming = {};
+    state.edges.forEach(function(ed){ incoming[ed.to] = (incoming[ed.to]||0)+1; });
+    var gapCount = 0;
+    state.nodes.forEach(function(n){
+      var cfg = TYPES[n.type];
+      var isGap = !!cfg.needsIncoming && !incoming[n.id];
+      n.gap = isGap;
+      if(isGap) gapCount++;
+      var el = nodeEls[n.id];
+      if(el){ el.classList.toggle('gap', isGap); }
+    });
+    els.gapPill.textContent = gapCount + (gapCount===1 ? ' gap' : ' gaps');
+    els.gapPill.classList.toggle('has-gaps', gapCount>0);
+  }
+
+  // ---------------- node DOM ----------------
+  function buildNodeEl(node){
+    var cfg = TYPES[node.type];
+    var el = document.createElement('div');
+    el.className = 'node';
+    el.dataset.id = node.id;
+    el.style.left = node.x+'px';
+    el.style.top = node.y+'px';
+    el.style.setProperty('--type-c', cfg.color);
+
+    var bar = document.createElement('div');
+    bar.className = 'node-bar';
+    var badge = document.createElement('span');
+    badge.className = 'node-badge';
+    badge.textContent = cfg.short;
+    var del = document.createElement('button');
+    del.className = 'node-del';
+    del.textContent = '×';
+    del.title = 'Delete node';
+    var delConfirming = false, delTimer = null;
+    del.addEventListener('pointerdown', function(e){ e.stopPropagation(); });
+    del.addEventListener('click', function(e){
+      e.stopPropagation();
+      if(!delConfirming){
+        delConfirming = true;
+        del.classList.add('confirm');
+        del.textContent = '?';
+        delTimer = setTimeout(function(){ delConfirming=false; del.classList.remove('confirm'); del.textContent='×'; }, 2200);
+      } else {
+        clearTimeout(delTimer);
+        removeNode(node.id);
+      }
+    });
+    bar.appendChild(badge);
+    bar.appendChild(del);
+
+    var body = document.createElement('div');
+    body.className = 'node-body';
+
+    var title = document.createElement('div');
+    title.className = 'node-title';
+    title.contentEditable = 'true';
+    title.dataset.ph = cfg.label + ' — title';
+    title.textContent = node.title || '';
+    title.addEventListener('pointerdown', function(e){ e.stopPropagation(); });
+    title.addEventListener('input', function(){ node.title = title.textContent; save(); });
+
+    var text = document.createElement('div');
+    text.className = 'node-text';
+    text.contentEditable = 'true';
+    text.dataset.ph = cfg.ph;
+    text.textContent = node.body || '';
+    text.addEventListener('pointerdown', function(e){ e.stopPropagation(); });
+    text.addEventListener('input', function(){ node.body = text.textContent; save(); });
+
+    var gapTag = document.createElement('div');
+    gapTag.className = 'gap-tag';
+    gapTag.textContent = '⚠ no evidence trail yet';
+
+    body.appendChild(title);
+    body.appendChild(text);
+    body.appendChild(gapTag);
+
+    var conn = document.createElement('div');
+    conn.className = 'connector'; conn.tabIndex = 0;
+    conn.title = 'Click to connect this node to another';
+    conn.addEventListener('pointerdown', function(e){
+      e.preventDefault(); e.stopPropagation();
+      if(connectSource){
+        if(connectSource.id===node.id){ disarmConnect(); return; }
+        var src = connectSource;
+        disarmConnect();
+        openEdgePopup(src, node, e.clientX, e.clientY);
+        return;
+      }
+      armConnect(node, el);
+    });
+    conn.addEventListener('keydown', function(e){
+      if(e.key==='Enter' || e.key===' '){
+        e.preventDefault();
+        if(connectSource && connectSource.id===node.id){ disarmConnect(); } else { armConnect(node, el); }
+      }
+    });
+
+    el.appendChild(bar);
+    el.appendChild(body);
+    el.appendChild(conn);
+
+    // drag
+    var dragState = null;
+    bar.addEventListener('pointerdown', function(e){
+      if(e.target.closest('.node-del')) return;
+      if(connectSource) return;
+      dragState = { startX:e.clientX, startY:e.clientY, origX:node.x, origY:node.y, pid:e.pointerId };
+      bar.setPointerCapture(e.pointerId);
+      el.classList.add('dragging');
+    });
+    bar.addEventListener('pointermove', function(e){
+      if(!dragState) return;
+      node.x = dragState.origX + (e.clientX-dragState.startX)/zoom;
+      node.y = dragState.origY + (e.clientY-dragState.startY)/zoom;
+      el.style.left = node.x+'px';
+      el.style.top = node.y+'px';
+      renderEdgesOnly();
+    });
+    bar.addEventListener('pointerup', function(e){
+      if(!dragState) return;
+      try{ bar.releasePointerCapture(dragState.pid); }catch(err){}
+      dragState = null;
+      el.classList.remove('dragging');
+      save();
+    });
+
+    els.world.appendChild(el);
+    nodeEls[node.id] = el;
+    return el;
+  }
+
+  // ---------------- edges render ----------------
+  function ensureMarkers(){
+    els.defs.innerHTML = '';
+    Object.keys(EDGE_KINDS).forEach(function(key){
+      var cfg = EDGE_KINDS[key];
+      if(!cfg.arrow) return;
+      var marker = document.createElementNS(SVGNS,'marker');
+      marker.setAttribute('id','arrow-'+key);
+      marker.setAttribute('viewBox','0 0 10 10');
+      marker.setAttribute('refX','8'); marker.setAttribute('refY','5');
+      marker.setAttribute('markerWidth','8'); marker.setAttribute('markerHeight','8');
+      marker.setAttribute('orient','auto-start-reverse');
+      var path = document.createElementNS(SVGNS,'path');
+      path.setAttribute('d','M0,0 L10,5 L0,10 z');
+      path.setAttribute('fill', cfg.color);
+      marker.appendChild(path);
+      els.defs.appendChild(marker);
+    });
+    var diamond = document.createElementNS(SVGNS,'marker');
+    diamond.setAttribute('id','tension-diamond');
+    diamond.setAttribute('viewBox','0 0 10 10');
+    diamond.setAttribute('refX','5'); diamond.setAttribute('refY','5');
+    diamond.setAttribute('markerWidth','7'); diamond.setAttribute('markerHeight','7');
+    var dpath = document.createElementNS(SVGNS,'path');
+    dpath.setAttribute('d','M5,0 L10,5 L5,10 L0,5 z');
+    dpath.setAttribute('fill', EDGE_KINDS.contradicts.color);
+    diamond.appendChild(dpath);
+    els.defs.appendChild(diamond);
+  }
+
+  function renderEdgesOnly(){
+    var oldNodes = els.svg.querySelectorAll('.edge-line, .edge-label');
+    oldNodes.forEach(function(n){ n.remove(); });
+
+    state.edges.forEach(function(edge){
+      var a = getNode(edge.from), b = getNode(edge.to);
+      if(!a || !b) return;
+      var cfg = EDGE_KINDS[edge.kind] || EDGE_KINDS.leads;
+      var p1, p2;
+      if(a.x <= b.x){ p1 = nodeCenter(a,'right'); p2 = nodeCenter(b,'left'); }
+      else { p1 = nodeCenter(a,'left'); p2 = nodeCenter(b,'right'); }
+
+      var path = document.createElementNS(SVGNS,'path');
+      path.setAttribute('d', bezierPath(p1.x,p1.y,p2.x,p2.y));
+      path.setAttribute('fill','none');
+      path.setAttribute('stroke', cfg.color);
+      path.setAttribute('stroke-width', edge.kind==='tests' ? '2.6' : '2.2');
+      path.setAttribute('stroke-linecap','round');
+      path.classList.add('edge-line', cfg.cls);
+      if(cfg.arrow){
+        path.setAttribute('marker-end','url(#arrow-'+edge.kind+')');
+      } else {
+        path.setAttribute('marker-start','url(#tension-diamond)');
+        path.setAttribute('marker-end','url(#tension-diamond)');
+      }
+      els.svg.appendChild(path);
+
+      // label chip on the line, click twice to delete
+      var mid = bezierMid(p1.x,p1.y,p2.x,p2.y);
+      var labelText = cfg.label.toUpperCase();
+      var w = labelText.length*5.6 + 16;
+      var h = 17;
+      var g = document.createElementNS(SVGNS,'g');
+      g.classList.add('edge-label');
+      g.style.cursor = 'pointer';
+      g.style.pointerEvents = 'auto';
+
+      var rect = document.createElementNS(SVGNS,'rect');
+      rect.setAttribute('x', mid.x - w/2);
+      rect.setAttribute('y', mid.y - h/2);
+      rect.setAttribute('width', w);
+      rect.setAttribute('height', h);
+      rect.setAttribute('rx', 4);
+      rect.style.fill = 'var(--chrome-bg)';
+      rect.style.stroke = cfg.color;
+      rect.setAttribute('stroke-width','1');
+
+      var text = document.createElementNS(SVGNS,'text');
+      text.setAttribute('x', mid.x);
+      text.setAttribute('y', mid.y + 3);
+      text.setAttribute('text-anchor','middle');
+      text.setAttribute('font-family','var(--font-mono)');
+      text.setAttribute('font-size','9');
+      text.setAttribute('font-weight','600');
+      text.setAttribute('letter-spacing','0.4');
+      text.style.fill = cfg.color;
+      text.textContent = labelText;
+
+      g.appendChild(rect);
+      g.appendChild(text);
+      els.svg.appendChild(g);
+
+      (function(edgeRef, rectRef, textRef, baseLabel, baseColor){
+        var confirming = false, timer = null;
+        g.addEventListener('pointerdown', function(e){
+          e.stopPropagation();
+          if(!confirming){
+            confirming = true;
+            textRef.textContent = 'DELETE?';
+            rectRef.style.stroke = '#d8432f';
+            textRef.style.fill = '#d8432f';
+            timer = setTimeout(function(){
+              confirming = false;
+              textRef.textContent = baseLabel;
+              rectRef.style.stroke = baseColor;
+              textRef.style.fill = baseColor;
+            }, 2200);
+          } else {
+            clearTimeout(timer);
+            removeEdgeById(edgeRef.id);
+          }
+        });
+      })(edge, rect, text, labelText, cfg.color);
+    });
+  }
+
+  // ---------------- legend + toolbar build ----------------
+  function buildChrome(){
+    Object.keys(TYPES).forEach(function(key){
+      var cfg = TYPES[key];
+      var btn = document.createElement('button');
+      btn.className = 'add-btn';
+      btn.innerHTML = '<span class="dot" style="background:'+cfg.color+'"></span>+ '+cfg.label;
+      btn.addEventListener('click', function(){ addNode(key); });
+      els.addGroup.appendChild(btn);
+
+      var row = document.createElement('div');
+      row.className = 'lg-row';
+      row.innerHTML = '<span class="dot" style="background:'+cfg.color+'"></span><span>'+cfg.label+(cfg.needsIncoming ? ' <span style="color:var(--ink-dim)">(needs a link in)</span>' : '')+'</span>';
+      els.lgTypes.appendChild(row);
+    });
+    Object.keys(EDGE_KINDS).forEach(function(key){
+      var cfg = EDGE_KINDS[key];
+      var row = document.createElement('div');
+      row.className = 'lg-row';
+      row.innerHTML = '<span class="line" style="border-color:'+cfg.color+'"></span><span>'+cfg.label+'</span>';
+      els.lgEdges.appendChild(row);
+    });
+  }
+  els.legendToggle.addEventListener('click', function(){
+    els.legend.classList.toggle('collapsed');
+    els.legendChevron.textContent = els.legend.classList.contains('collapsed') ? '▸' : '▾';
+  });
+
+  // ---------------- init ----------------
+  function renderAll(){
+    els.world.innerHTML = '';
+    els.world.appendChild(els.svg);
+    nodeEls = {};
+    state.nodes.forEach(function(n){ buildNodeEl(n); });
+    ensureMarkers();
+    renderEdgesOnly();
+    recomputeGaps();
+  }
+
+  buildChrome();
+  if(!load()){ seed(); }
+  renderAll();
+  applyTransform();
+  save();
+
+})();
+</script>
+</body>
+</html>
