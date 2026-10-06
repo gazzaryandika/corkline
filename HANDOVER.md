@@ -2,6 +2,33 @@
 
 Last updated: 2026-10-06 (Sources: documents → draft cards; branch `feature/document-upload`)
 
+## Links as sources (2026-10-06, Ayan; branch `feature/link-sources`, built on `feature/document-upload`)
+
+**Done: links can be read as sources, from the AI Assistant or the Sources panel.** Paste a link in the
+chat and it offers "Read as source"; Corkline fetches it, drafts cards, and the chat shows "N cards ready
+to review" with a button into the usual review list. Details in `app/README.md` → "Links".
+
+Decisions:
+- Web pages are fetched by the dev server and turned into readable text in the browser (Mozilla
+  Readability), then stored as a text source, so quotes can be checked (✓/⚠) like any text document.
+  We keep our own copy of what was read, so later changes to the page don't change the evidence.
+- PDF/image links are downloaded like uploads. YouTube links go straight to Gemini (public videos).
+- Pages behind a login (Brightspace, private Google Docs, Miro, Notion) can't be read; the message says
+  to download or copy instead. JavaScript-built pages may come back empty and are refused rather than
+  guessed at.
+- The server only fetches public addresses (never this computer or the local network, checked at
+  every redirect), with a size and time limit.
+- Adding and reading sources moved out of the Sources panel into `useSourceActions` so the chat can use
+  it and reads continue while the panel is closed.
+- Fixed while testing: quick successive Accept clicks in the review list could overwrite each other.
+
+Tested 2026-10-06: the address safety checks (10 cases refused), a Wikipedia article (clean text, 6
+sensible Gemini cards, all quotes verified, cards link back), a PDF link, a 404, a YouTube video (renamed
+to its title, quote from what was said), chat link-only message (no chat call) and link + question.
+
+**Base branch:** this branch was started from `feature/document-upload` because it needs that work. Merge
+pull request #1 first, then this one (its pull request can then target `main`).
+
 ## Sources: documents → draft cards (2026-10-06, Ayan)
 
 **Done: designers can add the documents behind a project and the AI drafts cards from them for review.**

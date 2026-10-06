@@ -1,26 +1,12 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useReactFlow } from '@xyflow/react';
 import { NODE_TYPE_ORDER, NODE_TYPES, SOURCE_KIND_ORDER, SOURCE_KINDS } from '../config';
 import { fetchAiStatus, type AiStatus } from '../ai/client';
 import { useAiMode } from '../ai/mode';
-import { extractCards, type ExtractContent } from '../ai/extract';
-import { describeBoard } from '../ai/boardContext';
-import {
-  ACCEPTED_EXTENSIONS,
-  MAX_FILE_BYTES,
-  MAX_TEXT_CHARS,
-  PASTED_MIME_TYPE,
-  baseName,
-  categoryOf,
-  checkFile,
-  detectFileType,
-  extractText,
-  formatSize,
-  toBase64,
-  type FileCategory,
-} from '../lib/documents';
-import { deleteFile, getFile, putFile, saveExtractedText } from '../lib/fileStore';
+import { ACCEPTED_EXTENSIONS, MAX_FILE_BYTES, categoryOf, formatSize, type FileCategory } from '../lib/documents';
+import { displayLink } from '../lib/links';
+import { shortDate, type ReadState, type SourceActions } from '../state/useSourceActions';
 import type { BoardState } from '../state/useBoardState';
 import type { CardProposal, NodeTypeId, SourceDoc, SourceKindId } from '../types';
 import { ModelPicker } from './ModelPicker';
@@ -30,16 +16,13 @@ const DELETE_CONFIRM_MS = 2400;
 
 interface SourcesPanelProps {
   board: BoardState;
-  projectId: string;
-  open: boolean;
+  actions: SourceActions;
   onClose: () => void;
-  /** Reports which sources are being read, so the toolbar can show it while the panel is closed. */
-  onReadingChange?: (count: number) => void;
+  /** Open straight on this document's review (e.g. from the chat's "Review cards" button). */
+  initialReviewId?: string;
 }
 
-type View = { name: 'list' } | { name: 'paste' } | { name: 'review'; docId: string };
-
-type ReadState = { status: 'reading' } | { status: 'error'; message: string };
+type View = { name: 'list' } | { name: 'paste' } | { name: 'link' } | { name: 'review'; docId: string };
 
 const CATEGORY_ICON: Record<FileCategory, string> = {
   text: '¶',
@@ -47,6 +30,7 @@ const CATEGORY_ICON: Record<FileCategory, string> = {
   pdf: 'PDF',
   image: '▣',
   audio: '♪',
+  video: '▶',
 };
 
 const CATEGORY_LABEL: Record<FileCategory, string> = {
@@ -55,175 +39,83 @@ const CATEGORY_LABEL: Record<FileCategory, string> = {
   pdf: 'PDF',
   image: 'Image',
   audio: 'Audio',
+  video: 'Video',
 };
 
-/** A sensible starting kind, from the file name and type. The designer can change it. */
-function guessKind(name: string, category: FileCategory, isFirst: boolean): SourceKindId {
-  const n = name.toLowerCase();
-  if (/interview|transcript/.test(n)) return 'interview';
-  if (/observ|field|safari/.test(n)) return 'observation';
-  if (/brief|context|assignment|challenge/.test(n)) return 'context';
-  if (/workshop|sticky|whiteboard|post-?it/.test(n)) return 'workshop';
-  if (/research|report|paper|study|survey/.test(n)) return 'research';
-  if (category === 'audio') return 'interview';
-  if (category === 'image') return 'workshop';
-  return isFirst ? 'context' : 'other';
-}
-
-function shortDate(ts: number): string {
-  return new Date(ts).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-}
-
-export function SourcesPanel({ board, projectId, open, onClose, onReadingChange }: SourcesPanelProps) {
+export function SourcesPanel({ board, actions, onClose, initialReviewId }: SourcesPanelProps) {
   const { fitView } = useReactFlow();
-  const [view, setView] = useState<View>({ name: 'list' });
+  const [view, setView] = useState<View>(initialReviewId ? { name: 'review', docId: initialReviewId } : { name: 'list' });
   const [mode, setMode] = useAiMode();
   const [status, setStatus] = useState<AiStatus | null | undefined>(undefined);
-  const [reads, setReads] = useState<Record<string, ReadState>>({});
   const [addErrors, setAddErrors] = useState<string[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const deleteTimer = useRef<number | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Latest board, for reads that finish after the board has changed.
-  const boardRef = useRef(board);
-  useLayoutEffect(() => {
-    boardRef.current = board;
-  });
+  useEffect(() => {
+    if (mode === 'gemini') fetchAiStatus().then(setStatus);
+  }, [mode]);
 
   useEffect(() => {
-    if (open && mode === 'gemini') fetchAiStatus().then(setStatus);
-  }, [open, mode]);
-
-  useEffect(() => {
-    if (!open) return;
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose();
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, onClose]);
+  }, [onClose]);
 
   useEffect(() => () => window.clearTimeout(deleteTimer.current), []);
-
-  const readingCount = Object.values(reads).filter((r) => r.status === 'reading').length;
-  useEffect(() => onReadingChange?.(readingCount), [readingCount, onReadingChange]);
-
-  const setRead = (id: string, state: ReadState | null) =>
-    setReads((prev) => {
-      const next = { ...prev };
-      if (state) next[id] = state;
-      else delete next[id];
-      return next;
-    });
 
   // ---- adding ----
 
   const addFiles = useCallback(
     async (files: File[]) => {
-      const errors: string[] = [];
-      let isFirst = boardRef.current.sources.length === 0;
-      for (const file of files) {
-        const problem = checkFile(file);
-        if (problem) {
-          errors.push(problem);
-          continue;
-        }
-        const info = detectFileType(file.name, file.type)!;
-        const doc: SourceDoc = {
-          id: crypto.randomUUID(),
-          name: baseName(file.name),
-          kind: guessKind(file.name, info.category, isFirst),
-          mimeType: info.mimeType,
-          size: file.size,
-          addedAt: Date.now(),
-        };
-        try {
-          await putFile(projectId, doc.id, file);
-          boardRef.current.addSource(doc);
-          isFirst = false;
-        } catch (err) {
-          errors.push(`Couldn't store "${file.name}": ${(err as Error).message}`);
-        }
-      }
-      setAddErrors(errors);
+      setAddErrors(await actions.addFiles(files));
     },
-    [projectId],
+    [actions],
   );
 
   const addPasted = useCallback(
     async (name: string, kind: SourceKindId, text: string) => {
-      const blob = new Blob([text], { type: PASTED_MIME_TYPE });
-      const doc: SourceDoc = {
-        id: crypto.randomUUID(),
-        name: name.trim() || `Pasted notes, ${shortDate(Date.now())}`,
-        kind,
-        mimeType: PASTED_MIME_TYPE,
-        size: blob.size,
-        addedAt: Date.now(),
-      };
       try {
-        await putFile(projectId, doc.id, blob, text);
-        boardRef.current.addSource(doc);
+        await actions.addPasted(name, kind, text);
         setAddErrors([]);
         setView({ name: 'list' });
       } catch (err) {
         setAddErrors([`Couldn't store the pasted text: ${(err as Error).message}`]);
       }
     },
-    [projectId],
+    [actions],
   );
 
   // ---- reading with AI ----
 
   const readSource = useCallback(
     async (doc: SourceDoc) => {
-      setRead(doc.id, { status: 'reading' });
-      try {
-        const record = await getFile(projectId, doc.id);
-        if (!record) {
-          throw new Error(
-            "This document's file isn't stored in this browser (projects imported from JSON don't include files). Delete it and add the file again.",
-          );
-        }
-        const category = categoryOf(doc.mimeType);
-        let content: ExtractContent;
-        if (category === 'text' || category === 'docx') {
-          let text = record.text;
-          if (text === undefined) {
-            text = await extractText(record.blob, category);
-            await saveExtractedText(projectId, doc.id, text).catch(() => undefined);
-          }
-          if (!text.trim()) throw new Error('No text was found in this document.');
-          content = { text: text.slice(0, MAX_TEXT_CHARS), truncated: text.length > MAX_TEXT_CHARS };
-        } else {
-          content = { file: { mimeType: doc.mimeType, data: mode === 'gemini' ? await toBase64(record.blob) : '' } };
-        }
-
-        const current = boardRef.current;
-        const result = await extractCards({
-          mode,
-          doc,
-          content,
-          brief: current.brief,
-          boardText: describeBoard(current.nodes, current.edges, current.gapIds),
-        });
-        current.updateSource(doc.id, {
-          readAt: Date.now(),
-          summary: result.summary,
-          model: result.model,
-          proposals: result.proposals,
-        });
-        setRead(doc.id, null);
-        if (result.proposals.length > 0) {
-          setView((v) => (v.name === 'list' ? { name: 'review', docId: doc.id } : v));
-        }
-      } catch (err) {
-        setRead(doc.id, { status: 'error', message: (err as Error).message });
+      const result = await actions.readSource(doc);
+      if (result.ok && result.proposals > 0) {
+        setView((v) => (v.name === 'list' ? { name: 'review', docId: doc.id } : v));
       }
     },
-    [projectId, mode],
+    [actions],
+  );
+
+  /** Fetch a link, list it, and read it straight away. Returns an error message, or null. */
+  const addLink = useCallback(
+    async (url: string, kind: SourceKindId): Promise<string | null> => {
+      let doc: SourceDoc;
+      try {
+        doc = await actions.addLink(url, kind);
+      } catch (err) {
+        return (err as Error).message;
+      }
+      setAddErrors([]);
+      setView({ name: 'list' });
+      void readSource(doc);
+      return null;
+    },
+    [actions, readSource],
   );
 
   // ---- deleting ----
@@ -236,9 +128,7 @@ export function SourcesPanel({ board, projectId, open, onClose, onReadingChange 
       return;
     }
     setConfirmingDeleteId(null);
-    board.removeSource(doc.id);
-    setRead(doc.id, null);
-    deleteFile(projectId, doc.id).catch(() => undefined);
+    actions.removeSource(doc);
   };
 
   // ---- review ----
@@ -262,8 +152,6 @@ export function SourcesPanel({ board, projectId, open, onClose, onReadingChange 
     },
     [board, fitView, onClose],
   );
-
-  if (!open) return null;
 
   const reviewDoc = view.name === 'review' ? board.sources.find((s) => s.id === view.docId) : undefined;
   const geminiProblem =
@@ -318,7 +206,7 @@ export function SourcesPanel({ board, projectId, open, onClose, onReadingChange 
         {view.name === 'list' && (
           <SourceList
             board={board}
-            reads={reads}
+            reads={actions.reads}
             mode={mode}
             dragOver={dragOver}
             setDragOver={setDragOver}
@@ -327,6 +215,7 @@ export function SourcesPanel({ board, projectId, open, onClose, onReadingChange 
             onChooseFiles={() => fileInputRef.current?.click()}
             onDropFiles={addFiles}
             onPaste={() => setView({ name: 'paste' })}
+            onLink={() => setView({ name: 'link' })}
             onRead={readSource}
             onReview={(doc) => setView({ name: 'review', docId: doc.id })}
             onDelete={handleDelete}
@@ -338,10 +227,12 @@ export function SourcesPanel({ board, projectId, open, onClose, onReadingChange 
           <PasteForm isFirst={board.sources.length === 0} onAdd={addPasted} onCancel={() => setView({ name: 'list' })} />
         )}
 
+        {view.name === 'link' && <LinkForm onAdd={addLink} onCancel={() => setView({ name: 'list' })} />}
+
         {view.name === 'review' && reviewDoc && (
           <ReviewList
             doc={reviewDoc}
-            onChange={(proposals) => board.updateSource(reviewDoc.id, { proposals })}
+            onChange={(update) => board.updateSource(reviewDoc.id, (current) => ({ proposals: update(current.proposals ?? []) }))}
             onFinish={() => finishReview(reviewDoc)}
             onLater={() => setView({ name: 'list' })}
           />
@@ -383,6 +274,7 @@ interface SourceListProps {
   onChooseFiles: () => void;
   onDropFiles: (files: File[]) => void;
   onPaste: () => void;
+  onLink: () => void;
   onRead: (doc: SourceDoc) => void;
   onReview: (doc: SourceDoc) => void;
   onDelete: (doc: SourceDoc) => void;
@@ -400,6 +292,7 @@ function SourceList({
   onChooseFiles,
   onDropFiles,
   onPaste,
+  onLink,
   onRead,
   onReview,
   onDelete,
@@ -436,9 +329,13 @@ function SourceList({
           <button type="button" className="sources-btn" onClick={onPaste}>
             Paste text
           </button>
+          <button type="button" className="sources-btn" onClick={onLink}>
+            Add link
+          </button>
         </div>
         <span className="sources-drop__hint">
-          PDF, Word (.docx), text, Markdown, images, audio · up to {formatSize(MAX_FILE_BYTES)} each
+          PDF, Word (.docx), text, Markdown, images, audio · up to {formatSize(MAX_FILE_BYTES)} each · or a web page,
+          PDF link or YouTube video
         </span>
       </div>
 
@@ -459,12 +356,13 @@ function SourceList({
         <ol className="sources-list">
           {sources.map((doc) => {
             const category = categoryOf(doc.mimeType);
+            const isWebPage = !!doc.url && category === 'text';
             const read = reads[doc.id];
             const pending = doc.proposals?.length ?? 0;
             return (
               <li key={doc.id} className="source-row">
-                <span className={`source-row__icon source-row__icon--${category}`} aria-hidden>
-                  {CATEGORY_ICON[category]}
+                <span className={`source-row__icon source-row__icon--${isWebPage ? 'web' : category}`} aria-hidden>
+                  {isWebPage ? '↗' : CATEGORY_ICON[category]}
                 </span>
                 <div className="source-row__main">
                   <input
@@ -487,9 +385,15 @@ function SourceList({
                       ))}
                     </select>
                     <span>
-                      {CATEGORY_LABEL[category]} · {formatSize(doc.size)} · added {shortDate(doc.addedAt)}
+                      {isWebPage ? 'Web page' : CATEGORY_LABEL[category]}
+                      {doc.size > 0 ? ` · ${formatSize(doc.size)}` : ''} · added {shortDate(doc.addedAt)}
                     </span>
                   </div>
+                  {doc.url && (
+                    <a className="source-row__url" href={doc.url} target="_blank" rel="noopener noreferrer" title={doc.url}>
+                      {displayLink(doc.url)} ↗
+                    </a>
+                  )}
                   {doc.summary && <p className="source-row__summary">{doc.summary}</p>}
                   {read?.status === 'error' && <p className="source-row__error">{read.message}</p>}
                   {doc.readAt && !pending && read?.status !== 'reading' && (
@@ -599,6 +503,80 @@ function PasteForm({
 
 // ---------------------------------------------------------------------------
 
+function LinkForm({
+  onAdd,
+  onCancel,
+}: {
+  /** Resolves to an error message, or null once the link is added (and being read). */
+  onAdd: (url: string, kind: SourceKindId) => Promise<string | null>;
+  onCancel: () => void;
+}) {
+  const [url, setUrl] = useState('');
+  const [kind, setKind] = useState<SourceKindId>('research');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    if (!url.trim() || busy) return;
+    setBusy(true);
+    setError(null);
+    const problem = await onAdd(url, kind);
+    // On success the panel switches back to the list, so only failures land here.
+    if (problem) {
+      setError(problem);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="sources-body">
+      <label className="sources-field">
+        <span>Link</span>
+        <input
+          type="url"
+          value={url}
+          placeholder="https://… a web page, a link to a PDF, or a YouTube video"
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void submit();
+          }}
+          autoFocus
+        />
+        <small>
+          Public pages only. Pages behind a login (Brightspace, private Google Docs, Miro) can&rsquo;t be read; download
+          or copy those instead.
+        </small>
+      </label>
+      <label className="sources-field">
+        <span>Kind</span>
+        <select value={kind} onChange={(e) => setKind(e.target.value as SourceKindId)}>
+          {SOURCE_KIND_ORDER.map((k) => (
+            <option key={k} value={k}>
+              {SOURCE_KINDS[k].label}
+            </option>
+          ))}
+        </select>
+        <small>{SOURCE_KINDS[kind].hint}</small>
+      </label>
+      {error && (
+        <div className="sources-errors" role="alert">
+          <p>{error}</p>
+        </div>
+      )}
+      <div className="sources-footer">
+        <button type="button" className="sources-btn" onClick={onCancel}>
+          Cancel
+        </button>
+        <button type="button" className="sources-btn sources-btn--primary" disabled={!url.trim() || busy} onClick={submit}>
+          {busy ? 'Fetching…' : 'Add and read'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
 function ReviewList({
   doc,
   onChange,
@@ -606,7 +584,8 @@ function ReviewList({
   onLater,
 }: {
   doc: SourceDoc;
-  onChange: (proposals: CardProposal[]) => void;
+  /** Applied to the latest proposals, so quick successive clicks don't overwrite each other. */
+  onChange: (update: (proposals: CardProposal[]) => CardProposal[]) => void;
   onFinish: () => void;
   onLater: () => void;
 }) {
@@ -615,8 +594,8 @@ function ReviewList({
   const undecided = proposals.filter((p) => p.decision === 'pending').length;
 
   const patch = (id: string, change: Partial<CardProposal>) =>
-    onChange(proposals.map((p) => (p.id === id ? { ...p, ...change } : p)));
-  const setAll = (decision: CardProposal['decision']) => onChange(proposals.map((p) => ({ ...p, decision })));
+    onChange((current) => current.map((p) => (p.id === id ? { ...p, ...change } : p)));
+  const setAll = (decision: CardProposal['decision']) => onChange((current) => current.map((p) => ({ ...p, decision })));
 
   return (
     <>
@@ -646,18 +625,28 @@ function ReviewList({
       </div>
       <div className="sources-footer sources-footer--review">
         <span className="sources-footer__note">
-          {undecided === 1
-            ? '1 card not decided yet; it will be discarded.'
-            : undecided > 1
-              ? `${undecided} cards not decided yet; they will be discarded.`
-              : ' '}
+          {accepted === 0 && undecided > 0
+            ? 'Accept cards to add them, or reject all to finish.'
+            : undecided === 1
+              ? '1 card not decided yet; it will be discarded.'
+              : undecided > 1
+                ? `${undecided} cards not decided yet; they will be discarded.`
+                : ' '}
         </span>
         <button type="button" className="sources-btn" onClick={onLater}>
           Finish later
         </button>
-        <button type="button" className="sources-btn sources-btn--primary" onClick={onFinish}>
-          {accepted > 0 ? `Add ${accepted} ${accepted === 1 ? 'card' : 'cards'} to board` : 'Done, add nothing'}
-        </button>
+        {accepted === 0 && undecided === 0 ? (
+          // Every card rejected: still needs a way to close the review, so the
+          // document stops showing as "to review".
+          <button type="button" className="sources-btn sources-btn--primary" onClick={onFinish}>
+            Finish review (all rejected)
+          </button>
+        ) : (
+          <button type="button" className="sources-btn sources-btn--primary" onClick={onFinish} disabled={accepted === 0}>
+            {accepted > 0 ? `Add ${accepted} ${accepted === 1 ? 'card' : 'cards'} to board` : 'Add cards to board'}
+          </button>
+        )}
       </div>
     </>
   );
@@ -735,7 +724,7 @@ function ProposalRow({ proposal: p, onPatch }: { proposal: CardProposal; onPatch
           className={`proposal__check proposal__check--${p.quoteFound === null ? 'na' : p.quoteFound ? 'ok' : 'warn'}`}
         >
           {p.quoteFound === null
-            ? 'not checked automatically (PDF, image or audio)'
+            ? 'not checked automatically (PDF, image, audio or video)'
             : p.quoteFound
               ? '✓ found in the document'
               : '⚠ not found word for word in the document; check it'}

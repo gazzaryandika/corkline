@@ -19,10 +19,16 @@ export interface AiProxyOptions {
   model: string;
 }
 
-interface InlineFile {
-  mimeType: string;
-  /** base64, no data: prefix */
-  data: string;
+/** A file sent along with a turn: inline base64, or a public YouTube video Gemini fetches itself. */
+type InlineFile = { mimeType: string; data: string } | { fileUri: string };
+
+const YOUTUBE_PATTERN = /^https:\/\/(www\.|m\.)?(youtube\.com\/(watch\?|shorts\/|live\/)|youtu\.be\/)/;
+
+function isInlineFile(f: unknown): f is InlineFile {
+  if (!f || typeof f !== 'object') return false;
+  const v = f as Record<string, unknown>;
+  if ('fileUri' in v) return typeof v.fileUri === 'string' && YOUTUBE_PATTERN.test(v.fileUri);
+  return typeof v.mimeType === 'string' && typeof v.data === 'string';
 }
 
 interface ChatTurn {
@@ -94,14 +100,7 @@ function isChatRequest(value: unknown): value is ChatRequest {
         typeof m === 'object' &&
         (m.role === 'user' || m.role === 'assistant') &&
         typeof m.text === 'string' &&
-        (m.files === undefined ||
-          (Array.isArray(m.files) &&
-            m.files.every(
-              (f: unknown) =>
-                !!f &&
-                typeof (f as InlineFile).mimeType === 'string' &&
-                typeof (f as InlineFile).data === 'string',
-            ))),
+        (m.files === undefined || (Array.isArray(m.files) && m.files.every(isInlineFile))),
     )
   );
 }
@@ -122,7 +121,9 @@ async function callGemini(opts: AiProxyOptions, body: ChatRequest): Promise<{ te
     contents: body.messages.map((m) => ({
       role: m.role === 'assistant' ? 'model' : 'user',
       parts: [
-        ...(m.files ?? []).map((f) => ({ inlineData: { mimeType: f.mimeType, data: f.data } })),
+        ...(m.files ?? []).map((f) =>
+          'fileUri' in f ? { fileData: { fileUri: f.fileUri } } : { inlineData: { mimeType: f.mimeType, data: f.data } },
+        ),
         { text: m.text },
       ],
     })),

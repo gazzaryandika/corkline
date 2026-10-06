@@ -6,7 +6,11 @@ import { useAiMode } from '../ai/mode';
 import { CHAT_SYSTEM_PROMPT } from '../ai/prompts';
 import { stripMarkdown } from '../ai/plainText';
 import { ModelPicker } from './ModelPicker';
+import { SOURCE_KIND_ORDER, SOURCE_KINDS } from '../config';
+import { displayLink, findLinks, isYouTube, withoutLinks } from '../lib/links';
+import type { SourceActions } from '../state/useSourceActions';
 import type { BoardState, CardNode } from '../state/useBoardState';
+import type { SourceDoc, SourceKindId } from '../types';
 import './ChatPanel.css';
 
 /** How many earlier chat turns are sent along, so follow-up questions make sense. */
@@ -18,16 +22,34 @@ interface AttachedCard {
   nodeType: keyof typeof NODE_TYPES;
 }
 
+/** A link found in a message, offered as a source. Not sent to the model as chat. */
+interface LinkOffer {
+  id: string;
+  role: 'link';
+  url: string;
+  kind: SourceKindId;
+  status: 'offer' | 'fetching' | 'reading' | 'done' | 'error' | 'dismissed';
+  docId?: string;
+  docName?: string;
+  /** Cards proposed by the last read. */
+  proposals?: number;
+  error?: string;
+}
+
 type ChatMessage =
   | { id: string; role: 'user'; text: string; attachedCards?: AttachedCard[] }
   | { id: string; role: 'assistant'; text: string; model: string }
-  | { id: string; role: 'error'; text: string };
+  | { id: string; role: 'error'; text: string }
+  | LinkOffer;
 
 interface ChatPanelProps {
   board: BoardState;
+  sourceActions: SourceActions;
+  /** Opens the Sources panel on this document's review list. */
+  onOpenReview: (docId: string) => void;
 }
 
-export function ChatPanel({ board }: ChatPanelProps) {
+export function ChatPanel({ board, sourceActions, onOpenReview }: ChatPanelProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
@@ -35,6 +57,8 @@ export function ChatPanel({ board }: ChatPanelProps) {
   const [mode, setMode] = useAiMode();
   const [status, setStatus] = useState<AiStatus | null | undefined>(undefined);
   const listRef = useRef<HTMLDivElement>(null);
+  /** The source each link offer created, so Retry re-reads it instead of adding it twice. */
+  const linkDocs = useRef(new Map<string, SourceDoc>());
 
   const selectedCards: AttachedCard[] = board.nodes
     .filter((n): n is CardNode => n.type === 'card' && !!n.selected)
@@ -52,9 +76,9 @@ export function ChatPanel({ board }: ChatPanelProps) {
   const run = useCallback(
     async (conversation: ChatMessage[]) => {
       const turns: AiTurn[] = conversation
-        .filter((m) => m.role !== 'error')
+        .filter((m): m is Extract<ChatMessage, { role: 'user' | 'assistant' }> => m.role === 'user' || m.role === 'assistant')
         .slice(-HISTORY_TURNS)
-        .map((m) => ({ role: m.role === 'user' ? 'user' : 'assistant', text: m.text }));
+        .map((m) => ({ role: m.role, text: m.text }));
       if (turns.length === 0) return;
 
       // The current board goes with the newest question only, so the model always
@@ -90,11 +114,48 @@ export function ChatPanel({ board }: ChatPanelProps) {
       text,
       attachedCards: selectedCards.length > 0 ? selectedCards : undefined,
     };
-    const next = [...messages, userMessage];
+    // Links get an offer to read them as sources. If the message was only links,
+    // that's all; otherwise the question still goes to the model as usual.
+    const offers: LinkOffer[] = findLinks(text).map((url) => ({
+      id: crypto.randomUUID(),
+      role: 'link',
+      url,
+      kind: 'research',
+      status: 'offer',
+    }));
+    const next = [...messages, userMessage, ...offers];
     setMessages(next);
     setDraft('');
-    void run(next);
+    if (offers.length === 0 || withoutLinks(text).length > 0) void run(next);
   }, [draft, isTyping, messages, selectedCards, run]);
+
+  const patchLink = useCallback((id: string, patch: Partial<LinkOffer>) => {
+    setMessages((prev) => prev.map((m) => (m.id === id && m.role === 'link' ? { ...m, ...patch } : m)));
+  }, []);
+
+  /** Fetches the link (unless an earlier try already did), lists it as a source, and reads it. */
+  const readLink = useCallback(
+    async (offer: LinkOffer) => {
+      let doc = linkDocs.current.get(offer.id);
+      if (!doc) {
+        patchLink(offer.id, { status: 'fetching', error: undefined });
+        try {
+          doc = await sourceActions.addLink(offer.url, offer.kind);
+        } catch (err) {
+          patchLink(offer.id, { status: 'error', error: (err as Error).message });
+          return;
+        }
+        linkDocs.current.set(offer.id, doc);
+      }
+      patchLink(offer.id, { status: 'reading', docId: doc.id, docName: doc.name, error: undefined });
+      const result = await sourceActions.readSource(doc);
+      patchLink(
+        offer.id,
+        result.ok ? { status: 'done', proposals: result.proposals } : { status: 'error', error: result.error },
+      );
+    },
+    [patchLink, sourceActions],
+  );
 
   const handleRetry = useCallback(
     (errorId: string) => {
@@ -148,9 +209,22 @@ export function ChatPanel({ board }: ChatPanelProps) {
 
           <div className="chat-panel__messages" ref={listRef}>
             {messages.length === 0 && !isTyping && (
-              <p className="chat-panel__empty">Ask about the board, or select a card or two first.</p>
+              <p className="chat-panel__empty">
+                Ask about the board, or select a card or two first. Paste a link to read it as a source.
+              </p>
             )}
-            {messages.map((m) => (
+            {messages.map((m) =>
+              m.role === 'link' ? (
+                <LinkOfferCard
+                  key={m.id}
+                  offer={m}
+                  doc={m.docId ? board.sources.find((s) => s.id === m.docId) : undefined}
+                  onKind={(kind) => patchLink(m.id, { kind })}
+                  onRead={() => void readLink(m)}
+                  onDismiss={() => patchLink(m.id, { status: 'dismissed' })}
+                  onReview={() => m.docId && onOpenReview(m.docId)}
+                />
+              ) : (
               <div key={m.id} className={`chat-msg chat-msg--${m.role}`}>
                 {m.role === 'user' && m.attachedCards && m.attachedCards.length > 0 && (
                   <div className="chat-msg__chips">
@@ -170,7 +244,8 @@ export function ChatPanel({ board }: ChatPanelProps) {
                   </button>
                 )}
               </div>
-            ))}
+              ),
+            )}
             {isTyping && (
               <div className="chat-msg chat-msg--assistant">
                 <div className="chat-msg__bubble chat-msg__bubble--typing">
@@ -205,7 +280,7 @@ export function ChatPanel({ board }: ChatPanelProps) {
           <div className="chat-panel__composer">
             <input
               type="text"
-              placeholder="Ask about the board…"
+              placeholder="Ask about the board, or paste a link…"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
@@ -218,6 +293,97 @@ export function ChatPanel({ board }: ChatPanelProps) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+interface LinkOfferCardProps {
+  offer: LinkOffer;
+  /** The source this link became, once added (to see whether its review is still open). */
+  doc?: SourceDoc;
+  onKind: (kind: SourceKindId) => void;
+  onRead: () => void;
+  onDismiss: () => void;
+  onReview: () => void;
+}
+
+/** The chat's offer to read a pasted link as a source, and its progress. */
+function LinkOfferCard({ offer, doc, onKind, onRead, onDismiss, onReview }: LinkOfferCardProps) {
+  const pending = doc?.proposals?.length ?? 0;
+  const label = isYouTube(offer.url) ? 'YouTube video' : 'Link';
+
+  return (
+    <div className={`chat-link is-${offer.status}`}>
+      <div className="chat-link__head">
+        <span className="chat-link__label">{label}</span>
+        <a href={offer.url} target="_blank" rel="noopener noreferrer" title={offer.url}>
+          {displayLink(offer.url)} ↗
+        </a>
+      </div>
+
+      {offer.status === 'offer' && (
+        <>
+          <p>Read this as a source? Corkline drafts cards from it for you to review.</p>
+          <div className="chat-link__actions">
+            <select value={offer.kind} aria-label="Kind of source" onChange={(e) => onKind(e.target.value as SourceKindId)}>
+              {SOURCE_KIND_ORDER.map((k) => (
+                <option key={k} value={k}>
+                  {SOURCE_KINDS[k].label}
+                </option>
+              ))}
+            </select>
+            <button type="button" className="chat-link__primary" onClick={onRead}>
+              Read as source
+            </button>
+            <button type="button" onClick={onDismiss}>
+              No
+            </button>
+          </div>
+        </>
+      )}
+
+      {(offer.status === 'fetching' || offer.status === 'reading') && (
+        <p className="chat-link__progress">
+          <span className="chat-link__spinner" aria-hidden />
+          {offer.status === 'fetching' ? 'Fetching the page…' : `Reading “${doc?.name ?? offer.docName}”… this can take a minute`}
+        </p>
+      )}
+
+      {offer.status === 'done' && (
+        <>
+          <p>
+            Read “{doc?.name ?? offer.docName}”.{' '}
+            {offer.proposals === 0
+              ? 'No cards proposed; the summary is in Sources.'
+              : pending > 0
+                ? `${pending} ${pending === 1 ? 'card' : 'cards'} ready to review.`
+                : 'Review finished.'}
+          </p>
+          {pending > 0 && (
+            <div className="chat-link__actions">
+              <button type="button" className="chat-link__primary" onClick={onReview}>
+                Review cards
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {offer.status === 'error' && (
+        <>
+          <p className="chat-link__error">{offer.error}</p>
+          <div className="chat-link__actions">
+            <button type="button" onClick={onRead}>
+              Retry
+            </button>
+            <button type="button" onClick={onDismiss}>
+              Dismiss
+            </button>
+          </div>
+        </>
+      )}
+
+      {offer.status === 'dismissed' && <p className="chat-link__muted">Not read.</p>}
     </div>
   );
 }

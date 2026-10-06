@@ -127,6 +127,29 @@ them. Nothing reaches the board without being accepted.
    so the board reads top to bottom in the order documents were added. Each card remembers its
    source (document name + quote), shown on the card and in its full view.
 
+**Links.** Paste a link in the AI Assistant and it offers **Read as source** (with a kind picker); the
+Sources panel has **Add link** too. Both fetch, list and read the link in one go, and the chat shows
+progress and a **Review cards** button that opens the panel on that review. If the message also asks
+something, the chat still answers it (the chat AI is told it can't open links itself).
+
+- Web pages: the dev server fetches the page (`server/linkFetcher.ts`, `GET /api/fetch-url?url=…`,
+  since the browser can't because of CORS), then the browser extracts the article text with Mozilla
+  Readability (`src/lib/links.ts`) and stores it as a text source, so the quote check works. Menus,
+  footers and the like are dropped. Pages with too little readable text (logins, JavaScript-built
+  pages) are refused with a "copy the text and use Paste text" message.
+- Links to PDFs or images are downloaded and stored like uploaded files.
+- YouTube links aren't fetched: the proxy passes them to Gemini as `fileData`, which watches public
+  videos itself. The source is renamed to the video's title after the read.
+- Accepted cards from a link get it in their **Link** field, so the full view's Open button goes back
+  to the page.
+- Safety: the fetcher only fetches public http(s) addresses on the standard ports, refuses anything
+  resolving to this computer or a private network (checked again at every redirect), and stops at
+  14 MB / 20 s. The address is checked just before fetching rather than pinned, which is fine for a
+  local dev tool but not for a public server.
+
+Adding and reading sources lives in `src/state/useSourceActions.ts` (at board level), so reads keep
+going while the panel is closed and the chat can start them.
+
 **Changing a card's type.** In the review list, each proposal's **Type** dropdown changes it before
 accepting; the row then shows "AI suggested Evidence · undo". On the board, click a card's type badge
 (e.g. "EVID ▾") or the type in its full view to pick another type (`src/board/CardTypeSelect.tsx`, an

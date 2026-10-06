@@ -728,3 +728,23 @@
     justify-content: flex-end;
   }
 }
+
+.source-row__icon--web,
+.source-row__icon--video {
+  font-size: 14px;
+  color: var(--brand-b);
+}
+.source-row__url {
+  align-self: flex-start;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--brand-b);
+  text-decoration: none;
+}
+.source-row__url:hover {
+  text-decoration: underline;
+}

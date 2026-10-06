@@ -12,11 +12,8 @@ import { getAiModel, markModelUnavailable } from './mode';
 
 export type AiMode = 'mock' | 'gemini';
 
-export interface AiFile {
-  mimeType: string;
-  /** base64, without the data: prefix */
-  data: string;
-}
+/** A file for the model: inline base64 (no data: prefix), or a public YouTube link Gemini watches itself. */
+export type AiFile = { mimeType: string; data: string } | { fileUri: string };
 
 export interface AiTurn {
   role: 'user' | 'assistant';

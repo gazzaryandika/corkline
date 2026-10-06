@@ -123,6 +123,8 @@ export interface SourceDoc {
   mimeType: string;
   size: number;
   addedAt: number;
+  /** Set when the source was read from a link (web page, PDF link, YouTube video). */
+  url?: string;
   /** When the AI last read it. */
   readAt?: number;
   /** The AI's one- or two-sentence description of what the document contains. */

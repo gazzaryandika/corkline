@@ -23,6 +23,8 @@ export interface ExtractInput {
 }
 
 export interface ExtractResult {
+  /** The document's own title, as the model read it (used to name video sources). */
+  title: string;
   summary: string;
   proposals: CardProposal[];
   model: string;
@@ -35,6 +37,7 @@ const CONFIDENCES: Confidence[] = ['high', 'medium', 'low'];
 const RESPONSE_SCHEMA = {
   type: 'OBJECT',
   properties: {
+    title: { type: 'STRING' },
     summary: { type: 'STRING' },
     cards: {
       type: 'ARRAY',
@@ -53,8 +56,8 @@ const RESPONSE_SCHEMA = {
       },
     },
   },
-  required: ['summary', 'cards'],
-  propertyOrdering: ['summary', 'cards'],
+  required: ['title', 'summary', 'cards'],
+  propertyOrdering: ['title', 'summary', 'cards'],
 };
 
 export async function extractCards(input: ExtractInput): Promise<ExtractResult> {
@@ -84,6 +87,7 @@ export async function extractCards(input: ExtractInput): Promise<ExtractResult> 
   const reply = await askAi('gemini', { system: EXTRACT_SYSTEM_PROMPT, messages: [message], responseSchema: RESPONSE_SCHEMA });
   const parsed = parseReply(reply.text);
   return {
+    title: parsed.title,
     summary: parsed.summary,
     model: reply.model,
     proposals: parsed.cards.map((c) => ({
@@ -105,14 +109,14 @@ interface RawCard {
   confidence: Confidence;
 }
 
-function parseReply(text: string): { summary: string; cards: RawCard[] } {
+function parseReply(text: string): { title: string; summary: string; cards: RawCard[] } {
   let data: unknown;
   try {
     data = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, ''));
   } catch {
     throw new AiError('Gemini answered, but not in the expected format. Try reading the document again.');
   }
-  const obj = (data ?? {}) as { summary?: unknown; cards?: unknown };
+  const obj = (data ?? {}) as { title?: unknown; summary?: unknown; cards?: unknown };
   const rawCards = Array.isArray(obj.cards) ? obj.cards : [];
   const cards: RawCard[] = [];
   for (const raw of rawCards) {
@@ -129,7 +133,11 @@ function parseReply(text: string): { summary: string; cards: RawCard[] } {
       confidence: CONFIDENCES.includes(c.confidence as Confidence) ? (c.confidence as Confidence) : 'medium',
     });
   }
-  return { summary: typeof obj.summary === 'string' ? stripMarkdown(obj.summary).trim() : '', cards };
+  return {
+    title: typeof obj.title === 'string' ? stripMarkdown(obj.title).trim().slice(0, 120) : '',
+    summary: typeof obj.summary === 'string' ? stripMarkdown(obj.summary).trim() : '',
+    cards,
+  };
 }
 
 function normalise(text: string): string {
@@ -173,6 +181,7 @@ async function mockExtract(input: ExtractInput, sourceText: string | null): Prom
   if (sourceText === null) {
     return {
       model: 'mock',
+      title: '',
       summary: `[Mock: no model was called] "${input.doc.name}" is a file Mock mode can't read. Switch to Gemini to read it.`,
       proposals: [
         mockProposal(types[0], `Mock card from ${input.doc.name}`, '(mock mode: the file was not read)', null),
@@ -187,6 +196,7 @@ async function mockExtract(input: ExtractInput, sourceText: string | null): Prom
   const picked = sentences.slice(0, 4);
   return {
     model: 'mock',
+    title: '',
     summary: `[Mock: no model was called] Proposals below are just the first ${picked.length} sentences of "${input.doc.name}", typed in rotation.`,
     proposals: picked.map((s, i) => {
       const words = s.split(/\s+/);

@@ -1,6 +1,7 @@
 import { ReactFlowProvider } from '@xyflow/react';
 import { useCallback, useEffect, useState } from 'react';
 import { useBoardState } from './state/useBoardState';
+import { useSourceActions } from './state/useSourceActions';
 import { Toolbar } from './components/Toolbar';
 import { Legend } from './components/Legend';
 import { Banner } from './components/Banner';
@@ -17,10 +18,14 @@ interface BoardScreenProps {
 
 export function BoardScreen({ projectId, isNew }: BoardScreenProps) {
   const board = useBoardState(projectId);
-  const [sourcesOpen, setSourcesOpen] = useState(false);
-  const [readingCount, setReadingCount] = useState(0);
-  const openSources = useCallback(() => setSourcesOpen(true), []);
-  const closeSources = useCallback(() => setSourcesOpen(false), []);
+  // Adding and reading sources lives here, so reads keep going while the panel is
+  // closed and the chat can start them too.
+  const sourceActions = useSourceActions(board, projectId);
+  /** null: panel closed. reviewId: open straight on that document's review. */
+  const [sourcesPanel, setSourcesPanel] = useState<{ reviewId?: string } | null>(null);
+  const openSources = useCallback(() => setSourcesPanel({}), []);
+  const openReview = useCallback((docId: string) => setSourcesPanel({ reviewId: docId }), []);
+  const closeSources = useCallback(() => setSourcesPanel(null), []);
 
   useEffect(() => {
     if (isNew) clearNewMarker(projectId);
@@ -35,7 +40,7 @@ export function BoardScreen({ projectId, isNew }: BoardScreenProps) {
   return (
     <ReactFlowProvider>
       <div className="app-shell">
-        <Toolbar board={board} initialBriefOpen={isNew} onOpenSources={openSources} readingCount={readingCount} />
+        <Toolbar board={board} initialBriefOpen={isNew} onOpenSources={openSources} readingCount={sourceActions.readingCount} />
         {board.saveStatus === 'error' && (
           <Banner tone="error">
             Changes aren&rsquo;t saving ({board.saveError}) — use Export in the toolbar to back up your work now.
@@ -62,16 +67,16 @@ export function BoardScreen({ projectId, isNew }: BoardScreenProps) {
             </div>
           )}
           <Legend />
-          <ChatPanel board={board} />
+          <ChatPanel board={board} sourceActions={sourceActions} onOpenReview={openReview} />
         </main>
-        {/* Always mounted so a document being read keeps going while the panel is closed. */}
-        <SourcesPanel
-          board={board}
-          projectId={projectId}
-          open={sourcesOpen}
-          onClose={closeSources}
-          onReadingChange={setReadingCount}
-        />
+        {sourcesPanel && (
+          <SourcesPanel
+            board={board}
+            actions={sourceActions}
+            onClose={closeSources}
+            initialReviewId={sourcesPanel.reviewId}
+          />
+        )}
       </div>
     </ReactFlowProvider>
   );

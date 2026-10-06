@@ -6,7 +6,10 @@
  * - PDF, images and audio are sent to Gemini as files, which reads (or listens to) them itself.
  */
 
-export type FileCategory = 'text' | 'docx' | 'pdf' | 'image' | 'audio';
+export type FileCategory = 'text' | 'docx' | 'pdf' | 'image' | 'audio' | 'video';
+
+/** Stored type of a YouTube link source. There's no file: Gemini watches the video itself. */
+export const YOUTUBE_MIME_TYPE = 'video/youtube';
 
 interface FileTypeInfo {
   category: FileCategory;
@@ -70,6 +73,7 @@ export function categoryOf(mimeType: string): FileCategory {
   if (mimeType === 'application/pdf') return 'pdf';
   if (mimeType.startsWith('image/')) return 'image';
   if (mimeType.startsWith('audio/')) return 'audio';
+  if (mimeType.startsWith('video/')) return 'video';
   return 'text';
 }
 

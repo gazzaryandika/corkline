@@ -436,8 +436,11 @@ export function useBoardState(projectId: string) {
     setSources((prev) => [...prev, doc]);
   }, []);
 
-  const updateSource = useCallback((id: string, patch: Partial<SourceDoc>) => {
-    setSources((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+  /** `patch` can be a function of the current source, for changes based on its latest state. */
+  const updateSource = useCallback((id: string, patch: Partial<SourceDoc> | ((current: SourceDoc) => Partial<SourceDoc>)) => {
+    setSources((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, ...(typeof patch === 'function' ? patch(s) : patch) } : s)),
+    );
   }, []);
 
   const removeSource = useCallback((id: string) => {
@@ -461,6 +464,8 @@ export function useBoardState(projectId: string) {
             title: p.title,
             body: p.body,
             source: { docId: source.id, docName: source.name, quote: p.quote, aiType: p.suggestedType ?? p.nodeType },
+            // Cards read from a link point back to it (the card's own Link field, with its Open button).
+            ...(source.url ? { link: source.url } : {}),
           },
         }));
         return [...prev, ...added];
