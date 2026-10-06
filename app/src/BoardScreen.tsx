@@ -7,6 +7,8 @@ import { Legend } from './components/Legend';
 import { Banner } from './components/Banner';
 import { ChatPanel } from './components/ChatPanel';
 import { SourcesPanel } from './components/SourcesPanel';
+import { ThemesPanel } from './components/ThemesPanel';
+import type { ThemeProposal } from './types';
 import { BoardCanvas } from './board/BoardCanvas';
 import { clearNewMarker } from './lib/route';
 
@@ -26,6 +28,23 @@ export function BoardScreen({ projectId, isNew }: BoardScreenProps) {
   const openSources = useCallback(() => setSourcesPanel({}), []);
   const openReview = useCallback((docId: string) => setSourcesPanel({ reviewId: docId }), []);
   const closeSources = useCallback(() => setSourcesPanel(null), []);
+
+  // Themes the AI found and the designer hasn't finished reviewing (kept for this visit only).
+  const [themeReview, setThemeReview] = useState<{ themes: ThemeProposal[]; model: string } | null>(null);
+  const [themesOpen, setThemesOpen] = useState(false);
+  const handleThemesFound = useCallback((themes: ThemeProposal[], model: string) => {
+    setThemeReview(themes.length > 0 ? { themes, model } : null);
+    setThemesOpen(themes.length > 0);
+  }, []);
+  const updateThemes = useCallback(
+    (update: (themes: ThemeProposal[]) => ThemeProposal[]) =>
+      setThemeReview((prev) => (prev ? { ...prev, themes: update(prev.themes) } : prev)),
+    [],
+  );
+  const finishThemes = useCallback(() => {
+    setThemeReview(null);
+    setThemesOpen(false);
+  }, []);
 
   useEffect(() => {
     if (isNew) clearNewMarker(projectId);
@@ -67,7 +86,14 @@ export function BoardScreen({ projectId, isNew }: BoardScreenProps) {
             </div>
           )}
           <Legend />
-          <ChatPanel board={board} sourceActions={sourceActions} onOpenReview={openReview} />
+          <ChatPanel
+            board={board}
+            sourceActions={sourceActions}
+            onOpenReview={openReview}
+            themesPending={themeReview !== null}
+            onThemesFound={handleThemesFound}
+            onOpenThemes={() => setThemesOpen(true)}
+          />
         </main>
         {sourcesPanel && (
           <SourcesPanel
@@ -75,6 +101,16 @@ export function BoardScreen({ projectId, isNew }: BoardScreenProps) {
             actions={sourceActions}
             onClose={closeSources}
             initialReviewId={sourcesPanel.reviewId}
+          />
+        )}
+        {themesOpen && themeReview && (
+          <ThemesPanel
+            board={board}
+            themes={themeReview.themes}
+            model={themeReview.model}
+            onChange={updateThemes}
+            onDone={finishThemes}
+            onClose={() => setThemesOpen(false)}
           />
         )}
       </div>

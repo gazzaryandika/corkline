@@ -150,6 +150,43 @@ something, the chat still answers it (the chat AI is told it can't open links it
 Adding and reading sources lives in `src/state/useSourceActions.ts` (at board level), so reads keep
 going while the panel is closed and the chat can start them.
 
+## Themes: AI-suggested groups of cards
+
+**✦ Find themes** (under the AI Assistant's messages) asks the AI which cards share a theme, like
+clustering sticky notes in an affinity map. Rules (in `THEMES_SYSTEM_PROMPT`, `src/ai/prompts.ts`):
+themes only group cards of the **same type**; at least two cards each; every card in at most one theme
+(its strongest); cards with no shared thread are left out; nothing new is invented. Only cards that
+aren't in a group frame yet are considered, so the designer's own groups are left alone.
+
+**On a selection:** select cards first (⌘/Ctrl-click or Shift-drag) and the button becomes "✦ Find
+themes in N selected": only those cards are considered, including ones already in a group. Typing a
+request such as "are there any themes in these?" or "find themes" does the same (`isThemeRequest` in
+`ChatPanel.tsx`) instead of a normal chat answer. When the cards share no thread the AI says so, with a
+one-sentence reason (`note` in the response): "No themes among the 3 selected cards. …".
+
+The chat shows the result ("Found 3 themes among 13 cards") with **Review themes**, which opens
+`src/components/ThemesPanel.tsx`: rename each theme, take cards out (×), accept or reject it. Accepted
+themes become labelled group frames: the cards are gathered into a band below the board, one column per
+card type. The theme's one-line description shows as the frame label's tooltip. Afterwards, right-click a
+card → **Remove from "…"** takes it out of its frame (`removeFromGroup`); the frame refits, or disappears
+when empty. Frames can still be renamed or removed (×) as before.
+
+**Dragging cards into frames** works for any group frame, theme or not (`moveCardsIntoGroup`, wired up
+in `BoardCanvas` with `onNodeDrag`/`onNodeDragStop`). While dragging, the frame under the mouse pointer
+(or under the card's centre) is highlighted; on drop the card(s) join it, stacked under its last card.
+A card dragged from one frame to another leaves the first. Frames whose cards form one column (like
+themes) close the gap a card leaves (`tidyFrame`); freely arranged frames are only refitted. When a frame
+grows, frames below it are pushed down so frames never overlap (`separateFrames`). Any card type is
+accepted: the AI keeps themes to one type, but manual changes are the designer's call.
+
+`src/ai/themes.ts` builds the request with short internal card references (c1, c2…, never shown to the
+designer) and checks the answer: unknown references, cards of the wrong type, duplicates and one-card
+themes are dropped. Mock mode batches same-type cards in board order. Reviews in progress are kept for
+the visit only (not saved).
+
+Note: the Lite models find fewer themes than full Flash, and results vary between runs; run it again
+or use a bigger model from the picker if it misses obvious ones.
+
 **Changing a card's type.** In the review list, each proposal's **Type** dropdown changes it before
 accepting; the row then shows "AI suggested Evidence · undo". On the board, click a card's type badge
 (e.g. "EVID ▾") or the type in its full view to pick another type (`src/board/CardTypeSelect.tsx`, an

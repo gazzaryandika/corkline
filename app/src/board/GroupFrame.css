@@ -102,3 +102,11 @@
   opacity: 1;
   color: var(--text);
 }
+
+/* A card being dragged would join this frame if dropped now. */
+.group-frame.is-drop-target {
+  border-color: var(--brand-b);
+  border-style: solid;
+  background: color-mix(in srgb, var(--brand-b) 7%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-b) 20%, transparent);
+}

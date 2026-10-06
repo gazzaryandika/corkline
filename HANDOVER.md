@@ -2,6 +2,34 @@
 
 Last updated: 2026-10-06 (Sources: documents → draft cards; branch `feature/document-upload`)
 
+## Themes: AI-suggested groups (2026-10-06, Ayan; branch `feature/ai-themes`, built on `feature/link-sources`)
+
+**Done: the AI can propose themes among the cards on the board, which the designer reviews.** ✦ Find
+themes in the AI Assistant → "Found N themes" → Review themes → accepted themes become labelled group
+frames. Details in `app/README.md` → "Themes".
+
+Decisions (with Ayan):
+- **Theme frames**, i.e. the existing group frames: cards in a theme are gathered together (affinity
+  mapping), in a band below the board, one column per card type.
+- **Themes within one card type** (Evidence themes, Assumption themes, …), all types considered.
+- **One theme per card**, the strongest fit. The designer can take a card out: in the review (×) or later
+  on the board (right-click → Remove from "…", new).
+- Only ungrouped cards are considered, so the designer's own groups are never changed, unless the
+  designer **selects cards first**: then only the selection is considered (grouped or not). Typing
+  "are there any themes in these?" in the chat runs the same thing. If there's no shared thread the AI
+  says "No themes" with a one-sentence reason, which is a valid answer, not a failure (tested: 3
+  unrelated Evidence cards → "No themes … they do not share a common thread").
+- This is grouping what's already on the board, which matches the AI's "structure and flag, don't
+  invent" role; the prompt says so explicitly (`THEMES_SYSTEM_PROMPT`).
+- **Dragging a card onto a frame adds it** (any frame, any card type; the target frame highlights while
+  dragging). Cards stack neatly in one-column frames, gaps close when a card leaves, and a growing frame
+  pushes the frames below it down so they never overlap. Tested with real mouse drags: loose card →
+  theme, theme → other theme, right-click remove.
+
+Tested 2026-10-06 with 13 test cards: the review (rename, remove a card, accept/reject), frames on the
+board, Remove from theme, and a second run skipping themed cards. Gemini 3.5 Flash-Lite found 1–3 themes
+depending on the run (it's less thorough than full Flash, whose free quota is only 20 requests a day).
+
 ## Links as sources (2026-10-06, Ayan; branch `feature/link-sources`, built on `feature/document-upload`)
 
 **Done: links can be read as sources, from the AI Assistant or the Sources panel.** Paste a link in the

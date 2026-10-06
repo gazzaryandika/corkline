@@ -56,7 +56,19 @@ export interface RelationData {
 
 export interface GroupData {
   label: string;
+  /** For a theme the AI proposed: one sentence on what its cards have in common. */
+  description?: string;
   [key: string]: unknown;
+}
+
+/** A theme the AI found among cards of one type, waiting for the designer's review. */
+export interface ThemeProposal {
+  id: string;
+  nodeType: NodeTypeId;
+  name: string;
+  description: string;
+  cardIds: string[];
+  decision: 'pending' | 'accepted' | 'rejected';
 }
 
 export interface CardBoardNode {

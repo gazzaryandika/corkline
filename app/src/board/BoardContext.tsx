@@ -18,6 +18,8 @@ export interface BoardContextValue {
   focusNodeIds: Set<string> | null;
   /** Edge ids that touch the current selection — these glow instead of dimming. */
   focusEdgeIds: Set<string> | null;
+  /** The frame a card being dragged would join if dropped now. */
+  dropTargetGroupId: string | null;
 }
 
 export const BoardContext = createContext<BoardContextValue | null>(null);

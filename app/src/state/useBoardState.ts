@@ -150,6 +150,146 @@ function layoutDraftCards(nodes: AnyNode[], types: NodeTypeId[]): Array<{ x: num
   });
 }
 
+const THEME_COLUMN_GAP = 60;
+const THEME_STACK_GAP = 48;
+const THEME_CARD_GAP = 16;
+
+export interface ThemeToCreate {
+  nodeType: NodeTypeId;
+  label: string;
+  description: string;
+  cardIds: string[];
+}
+
+/**
+ * Gathers each theme's cards into a labelled group frame. The frames go in a band
+ * below everything that stays where it is, one column per card type (same order as
+ * the toolbar), stacked when a type has several themes. Returns the new nodes and
+ * `groupIds[i]` is the id for `themes[i]`'s frame (made by the caller, so they're
+ * known straight away and stay the same if React runs this update twice).
+ */
+function placeThemes(nodes: AnyNode[], themes: ThemeToCreate[], groupIds: string[]): AnyNode[] {
+  const moving = new Set(themes.flatMap((t) => t.cardIds));
+  const groupPos = new Map(nodes.filter(isGroup).map((g) => [g.id, g.position]));
+  const absolute = (n: AnyNode) => {
+    const offset = isCard(n) && n.parentId ? groupPos.get(n.parentId) ?? { x: 0, y: 0 } : { x: 0, y: 0 };
+    return { x: offset.x + n.position.x, y: offset.y + n.position.y };
+  };
+  const heightOf = (n: AnyNode) => (isGroup(n) ? n.height ?? DEFAULT_CARD_HEIGHT : n.measured?.height ?? DEFAULT_CARD_HEIGHT);
+
+  // Where the band starts: below whatever isn't moving (or where the moving cards were, if everything moves).
+  const staying = nodes.filter((n) => !moving.has(n.id));
+  const reference = staying.length > 0 ? staying : nodes.filter((n) => moving.has(n.id));
+  let minX = Infinity;
+  let maxY = -Infinity;
+  for (const n of reference) {
+    const p = absolute(n);
+    minX = Math.min(minX, p.x);
+    maxY = Math.max(maxY, p.y + (staying.length > 0 ? heightOf(n) : 0));
+  }
+  const originX = Number.isFinite(minX) ? minX : 0;
+  const originY = Number.isFinite(maxY) ? maxY + (staying.length > 0 ? DRAFT_MARGIN : 0) : 0;
+
+  const frameWidth = CARD_WIDTH + GROUP_PADDING * 2;
+  const columnY = new Map<NodeTypeId, number>();
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const newGroups: GroupNode[] = [];
+  const cardUpdates = new Map<string, { parentId: string; position: { x: number; y: number } }>();
+
+  themes.forEach((theme, i) => {
+    const cards = theme.cardIds.map((id) => byId.get(id)).filter((n): n is CardNode => !!n && isCard(n));
+    if (cards.length === 0) return;
+    const groupId = groupIds[i];
+    let y = GROUP_PADDING;
+    for (const card of cards) {
+      cardUpdates.set(card.id, { parentId: groupId, position: { x: GROUP_PADDING, y } });
+      y += heightOf(card) + THEME_CARD_GAP;
+    }
+    const height = y - THEME_CARD_GAP + GROUP_PADDING;
+    const top = columnY.get(theme.nodeType) ?? originY;
+    columnY.set(theme.nodeType, top + height + THEME_STACK_GAP);
+    newGroups.push({
+      id: groupId,
+      type: 'group',
+      position: { x: originX + NODE_TYPE_ORDER.indexOf(theme.nodeType) * (frameWidth + THEME_COLUMN_GAP), y: top },
+      width: frameWidth,
+      height,
+      data: { label: theme.label, description: theme.description },
+      dragHandle: GROUP_DRAG_HANDLE,
+    });
+  });
+
+  // Frames must come before their cards in React Flow's node list.
+  const updated = nodes.map((n) => {
+    const u = cardUpdates.get(n.id);
+    return u && isCard(n) ? { ...n, parentId: u.parentId, position: u.position } : n;
+  });
+  let next: AnyNode[] = [...newGroups, ...updated];
+  // Frames the moved cards came from may now be empty or too big.
+  const oldParents = new Set(
+    nodes.filter((n): n is CardNode => isCard(n) && moving.has(n.id) && !!n.parentId).map((n) => n.parentId!),
+  );
+  for (const groupId of oldParents) {
+    next = next.some((n) => isCard(n) && n.parentId === groupId) ? fitGroupToChildren(next, groupId) : removeNodeById(next, groupId);
+  }
+  return next;
+}
+
+/** After a frame grows, pushes any frame it now overlaps (that starts lower down) below
+ * it, and so on down the column, so frames never end up on top of each other. Cards in
+ * those frames move with them. */
+function pushFramesBelow(nodes: AnyNode[], grownId: string): AnyNode[] {
+  const rects = new Map(
+    nodes.filter(isGroup).map((g) => [g.id, { x: g.position.x, y: g.position.y, w: g.width ?? 0, h: g.height ?? 0 }]),
+  );
+  const queue = [grownId];
+  while (queue.length > 0) {
+    const above = rects.get(queue.shift()!)!;
+    for (const [id, r] of rects) {
+      if (r === above || r.y < above.y) continue;
+      const overlapsX = r.x < above.x + above.w && above.x < r.x + r.w;
+      const overlapsY = r.y < above.y + above.h + THEME_STACK_GAP;
+      if (overlapsX && overlapsY) {
+        r.y = above.y + above.h + THEME_STACK_GAP;
+        queue.push(id);
+      }
+    }
+  }
+  return nodes.map((n) => {
+    const r = isGroup(n) ? rects.get(n.id) : undefined;
+    return r && r.y !== n.position.y ? { ...n, position: { x: n.position.x, y: r.y } } : n;
+  });
+}
+
+/** Runs pushFramesBelow for every frame, top to bottom, so no two frames overlap. */
+function separateFrames(nodes: AnyNode[]): AnyNode[] {
+  let next = nodes;
+  const order = nodes.filter(isGroup).sort((a, b) => a.position.y - b.position.y);
+  for (const g of order) next = pushFramesBelow(next, g.id);
+  return next;
+}
+
+/** If a frame's cards form one column (like an AI theme), closes gaps left by cards
+ * taken out, then refits the frame. Frames arranged freely are only refitted. */
+function tidyFrame(nodes: AnyNode[], groupId: string): AnyNode[] {
+  const members = nodes
+    .filter((n): n is CardNode => isCard(n) && n.parentId === groupId)
+    .sort((a, b) => a.position.y - b.position.y);
+  if (members.length === 0) return removeNodeById(nodes, groupId);
+  const oneColumn = members.every((m) => Math.abs(m.position.x - members[0].position.x) < 2);
+  if (!oneColumn) return fitGroupToChildren(nodes, groupId);
+  const newY = new Map<string, number>();
+  let y = members[0].position.y;
+  for (const m of members) {
+    newY.set(m.id, y);
+    y += (m.measured?.height ?? DEFAULT_CARD_HEIGHT) + THEME_CARD_GAP;
+  }
+  const compacted = nodes.map((n) =>
+    newY.has(n.id) && newY.get(n.id) !== n.position.y ? { ...n, position: { ...n.position, y: newY.get(n.id)! } } : n,
+  );
+  return fitGroupToChildren(compacted, groupId);
+}
+
 function removeNodeById(nodes: AnyNode[], id: string): AnyNode[] {
   return nodes.filter((n) => n.id !== id);
 }
@@ -394,6 +534,76 @@ export function useBoardState(projectId: string) {
     [setNodes],
   );
 
+  /** Takes one card out of its group frame, placing it just right of the frame.
+   * The frame refits, or disappears if it's now empty. */
+  const removeFromGroup = useCallback(
+    (cardId: string) => {
+      setNodes((prev) => {
+        const card = prev.find((n): n is CardNode => isCard(n) && n.id === cardId);
+        const group = card?.parentId ? prev.find((n): n is GroupNode => isGroup(n) && n.id === card.parentId) : undefined;
+        if (!card || !group) return prev;
+        let next = prev.map((n) =>
+          n.id === cardId
+            ? {
+                ...n,
+                parentId: undefined,
+                position: { x: group.position.x + (group.width ?? CARD_WIDTH) + 40, y: group.position.y + card.position.y },
+              }
+            : n,
+        );
+        return tidyFrame(next, group.id);
+      });
+    },
+    [setNodes],
+  );
+
+  /** Puts cards (dropped onto a frame) into that group, stacked neatly under the cards
+   * already in it. The frame grows to fit; frames they came from refit or disappear
+   * when empty. */
+  const moveCardsIntoGroup = useCallback(
+    (cardIds: string[], groupId: string) => {
+      setNodes((prev) => {
+        const group = prev.find((n): n is GroupNode => isGroup(n) && n.id === groupId);
+        if (!group) return prev;
+        const moving = new Set(cardIds.filter((id) => prev.some((n) => n.id === id && isCard(n) && n.parentId !== groupId)));
+        if (moving.size === 0) return prev;
+
+        // Continue the frame's column: same left edge, below its lowest card.
+        const members = prev.filter((n): n is CardNode => isCard(n) && n.parentId === groupId);
+        const left = members.length > 0 ? Math.min(...members.map((m) => m.position.x)) : GROUP_PADDING;
+        let top =
+          members.length > 0
+            ? Math.max(...members.map((m) => m.position.y + (m.measured?.height ?? DEFAULT_CARD_HEIGHT))) + THEME_CARD_GAP
+            : GROUP_PADDING;
+
+        const oldParents = new Set<string>();
+        let next = prev.map((n) => {
+          if (!isCard(n) || !moving.has(n.id)) return n;
+          if (n.parentId) oldParents.add(n.parentId);
+          const position = { x: left, y: top };
+          top += (n.measured?.height ?? DEFAULT_CARD_HEIGHT) + THEME_CARD_GAP;
+          return { ...n, parentId: groupId, position };
+        });
+        // React Flow needs a frame listed before its cards.
+        next = [...next.filter((n) => n.id === groupId), ...next.filter((n) => n.id !== groupId)];
+        next = fitGroupToChildren(next, groupId);
+        for (const oldId of oldParents) next = tidyFrame(next, oldId);
+        return separateFrames(next);
+      });
+    },
+    [setNodes],
+  );
+
+  /** Puts accepted AI themes on the board as group frames. Returns the frame ids. */
+  const createThemes = useCallback(
+    (themes: ThemeToCreate[]) => {
+      const groupIds = themes.map(() => crypto.randomUUID());
+      setNodes((prev) => placeThemes(prev, themes, groupIds));
+      return groupIds;
+    },
+    [setNodes],
+  );
+
   const updateGroupLabel = useCallback(
     (id: string, label: string) => {
       setNodes((prev) => prev.map((n) => (isGroup(n) && n.id === id ? { ...n, data: { ...n.data, label } } : n)));
@@ -504,6 +714,9 @@ export function useBoardState(projectId: string) {
     importDocument,
     groupSelection,
     ungroupNode,
+    removeFromGroup,
+    moveCardsIntoGroup,
+    createThemes,
     updateGroupLabel,
   };
 }
