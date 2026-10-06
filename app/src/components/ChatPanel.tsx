@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { NODE_TYPES } from '../config';
 import { askAi, fetchAiStatus, type AiMode, type AiStatus, type AiTurn } from '../ai/client';
-import { describeBoard } from '../ai/boardContext';
+import { describeBoard, describeBrief } from '../ai/boardContext';
 import { CHAT_SYSTEM_PROMPT } from '../ai/prompts';
 import { stripMarkdown } from '../ai/plainText';
 import type { BoardState, CardNode } from '../state/useBoardState';
@@ -73,7 +73,11 @@ export function ChatPanel({ board }: ChatPanelProps) {
       // sees the latest state rather than stale copies from earlier turns.
       const last = turns[turns.length - 1];
       const boardText = describeBoard(board.nodes, board.edges, board.gapIds);
-      turns[turns.length - 1] = { ...last, text: `CURRENT BOARD\n${boardText}\n\nQUESTION\n${last.text}` };
+      const briefText = describeBrief(board.brief);
+      turns[turns.length - 1] = {
+        ...last,
+        text: `PROJECT BRIEF\n${briefText}\n\nCURRENT BOARD\n${boardText}\n\nQUESTION\n${last.text}`,
+      };
 
       setIsTyping(true);
       try {
@@ -85,7 +89,7 @@ export function ChatPanel({ board }: ChatPanelProps) {
         setIsTyping(false);
       }
     },
-    [board.nodes, board.edges, board.gapIds, mode],
+    [board.nodes, board.edges, board.gapIds, board.brief, mode],
   );
 
   const handleSend = useCallback(() => {

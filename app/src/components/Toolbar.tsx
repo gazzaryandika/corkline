@@ -1,10 +1,11 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { CARD_WIDTH, NODE_TYPE_ORDER, NODE_TYPES } from '../config';
 import { parseImportedBoard } from '../lib/storage';
 import type { BoardState, CardNode, RelationEdgeType } from '../state/useBoardState';
 import type { NodeTypeId } from '../types';
 import { SaveStatusIndicator } from './SaveStatusIndicator';
+import { ProjectBriefModal } from './ProjectBriefModal';
 import './Toolbar.css';
 
 interface ToolbarProps {
@@ -14,6 +15,7 @@ interface ToolbarProps {
 export function Toolbar({ board }: ToolbarProps) {
   const { screenToFlowPosition, zoomIn, zoomOut, fitView } = useReactFlow<CardNode, RelationEdgeType>();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [briefOpen, setBriefOpen] = useState(false);
 
   const handleAdd = useCallback(
     (nodeType: NodeTypeId) => {
@@ -59,8 +61,16 @@ export function Toolbar({ board }: ToolbarProps) {
     <div className="toolbar">
       <div className="toolbar__brand">
         <span className="toolbar__mark" aria-hidden />
-        CORKLINE<span> · opportunity map</span>
+        CORKLINE<span> · {board.brief.name.trim() || 'opportunity map'}</span>
       </div>
+      <button
+        type="button"
+        className="group-btn"
+        title="Project name, description and context (the AI reads this)"
+        onClick={() => setBriefOpen(true)}
+      >
+        ✎ Project
+      </button>
       <div className="toolbar__add-group">
         {NODE_TYPE_ORDER.map((key) => {
           const cfg = NODE_TYPES[key];
@@ -111,6 +121,7 @@ export function Toolbar({ board }: ToolbarProps) {
           ⤾
         </button>
       </div>
+      {briefOpen && <ProjectBriefModal brief={board.brief} onChange={board.updateBrief} onClose={() => setBriefOpen(false)} />}
     </div>
   );
 }

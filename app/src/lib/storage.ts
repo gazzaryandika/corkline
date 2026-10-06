@@ -10,6 +10,10 @@ function isValidBoardDocument(value: unknown): value is BoardDocument {
   const doc = value as Record<string, unknown>;
   if (doc.version !== 1) return false;
   if (!Array.isArray(doc.nodes) || !Array.isArray(doc.edges)) return false;
+  if (doc.brief !== undefined) {
+    if (!doc.brief || typeof doc.brief !== 'object') return false;
+    if (!Object.values(doc.brief).every((v) => typeof v === 'string')) return false;
+  }
 
   for (const node of doc.nodes) {
     if (!node || typeof node !== 'object') return false;

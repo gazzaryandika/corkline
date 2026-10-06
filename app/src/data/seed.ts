@@ -1,4 +1,4 @@
-import type { BoardDocument, CardBoardNode, EdgeKindId, GroupBoardNode, NodeTypeId } from '../types';
+import type { BoardDocument, CardBoardNode, EdgeKindId, GroupBoardNode, NodeTypeId, ProjectBrief } from '../types';
 
 function card(
   id: string,
@@ -27,6 +27,28 @@ function relation(
   return { id, type: 'relation', source, target, data: { kind } };
 }
 
+/** Project brief for the seed board, summarised from the cards below. */
+export const SEED_BRIEF: ProjectBrief = {
+  name: 'Triodos Kids',
+  description:
+    'A Triodos Bank challenge: as digital payments replace cash, children aged 6–12 get fewer chances to see and handle money, and their engagement with their bank account drops as they grow older. ' +
+    "We reframed the question from \"how can children better understand money in a digital world?\" to \"how might we make money's real-world impact visible, tangible and meaningful for families?\" " +
+    'The resulting concept, Triodos Kids, combines a personalised kids bank card and an NFC "Trido" keychain, a child-facing app with Save / Spend / Give jars, and a TV-cast family review, so that learning about money becomes a shared parent–child experience rather than a standalone ed-tech tool.',
+  users:
+    'Children aged 6–12, who learn by doing and understand physical money but not digital money. ' +
+    'Their parents, who see financial education as their job but feel under-equipped to act on it day to day. ' +
+    'Teachers are secondary stakeholders: they support initiatives like Week van het Geld but do not see structured financial literacy as their responsibility.',
+  context:
+    'Client: Triodos Bank, a sustainability-focused bank with no kids product yet. Competitors such as GoHenry, Gimi and Greenlight are strong on kids education but weak on sustainability, so nobody serves both. ' +
+    'Course: TU Delft IDEM3210, "Designing Financial Futures for the Next Generation", Group 12. Setting: the Netherlands.',
+  stage:
+    'Concept selected and validated through four sprints (Sprint 2 feasibility, Sprint 3 assumption validation, Sprint 4 desirability testing). Roadmap Horizons 2 and 3 are planned but not yet evidence-tested.',
+  notes:
+    'Research base: 4 child interviews, 3 parent interviews, 5 teacher interviews, a Reddit analysis of 121 threads, a competitor scan, a parenting-trends survey, and sprint tests with 4 children and 4 parent–child pairs. Samples are small, so flag claims that rest on one source. ' +
+    'Known gaps: Web NFC does not work on iOS, and Horizons 2–3 have no evidence yet (their gap flags are intentional). ' +
+    'Most useful feedback: where the evidence trail from research to the final concept is weak, untested, or contradicted.',
+};
+
 /**
  * Seed board: the actual reasoning trail behind Triodos Kids (Group 12, IDEM3210,
  * "Designing Financial Futures for the Next Generation"), traced from the original
@@ -42,6 +64,7 @@ function relation(
 export function seedBoard(): BoardDocument {
   return {
     version: 1,
+    brief: { ...SEED_BRIEF },
     nodes: [
       // Groups must precede their members in this array — React Flow's rule for parent/child nodes.
       group('g-sprint2', 2156, 256, 328, 578, 'Sprint 2 — Feasibility'),

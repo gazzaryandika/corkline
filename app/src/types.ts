@@ -66,8 +66,20 @@ export interface GroupBoardNode {
 
 export type BoardNode = CardBoardNode | GroupBoardNode;
 
+/** What the project is about. Shown in the Project panel and sent to the AI with every request. */
+export interface ProjectBrief {
+  name: string;
+  description: string;
+  users: string;
+  context: string;
+  stage: string;
+  notes: string;
+}
+
 export interface BoardDocument {
   version: 1;
+  /** Optional so boards saved before the brief existed still load. */
+  brief?: ProjectBrief;
   nodes: BoardNode[];
   edges: Array<{ id: string; type: 'relation'; source: string; target: string; data: RelationData }>;
 }

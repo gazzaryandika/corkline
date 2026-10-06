@@ -74,6 +74,8 @@ git-ignored. Optionally set `GEMINI_MODEL` to change the model.
 - `src/ai/client.ts`: `askAi(mode, request)`, the single entry point every AI feature uses.
 - `src/ai/boardContext.ts`: writes the board out as text (cards named by type + title, e.g. Insight "…", relationships, gaps,
   selection) for the model to read.
+- Project brief (toolbar → ✎ Project): name, description, users, client/setting, stage and notes,
+  saved with the board and sent to the AI before the board on every question.
 - `src/ai/prompts.ts`: the system instructions defining the AI's role (inspect reasoning, don't invent ideas).
 
 See

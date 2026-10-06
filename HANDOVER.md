@@ -50,9 +50,16 @@ What the AI can and can't do right now: it **reads** the whole board and answers
 add, edit or delete cards or connections.
 
 Open decisions / next steps:
-1. **Project brief** (proposed, not built). A toolbar button and form for project goal, target users,
-   client/context (Triodos), current stage and extra notes. It would be saved with the board and sent
-   with every AI request, so the AI understands the whole project, not just the cards.
+1. ~~Project brief~~ **Done.** The **✎ Project** button in the toolbar opens a panel with two tabs:
+   - **Overview**: project name and description.
+   - **Context**: intended users, client/setting, current stage, and anything else the AI should know.
+
+   It saves with the board (and in Export/Import JSON), and the project name shows in the toolbar. It is
+   sent to the AI as a PROJECT BRIEF section before the board on every question. Verified: the AI
+   answered correctly from the brief. Files: `app/src/components/ProjectBriefModal.tsx`,
+   `ProjectBrief` in `app/src/types.ts`, and `describeBrief()` in `app/src/ai/boardContext.ts`.
+   The example board ships with a pre-filled Triodos Kids brief (`SEED_BRIEF` in `app/src/data/seed.ts`),
+   summarised from the board's own cards; the user should check it for accuracy.
 2. **Should the AI change the board?** The options are to stay read-only, or to have it propose changes
    (new card or link) that the user Accepts or Rejects. The second bends the "AI doesn't add ideas"
    rule, and it's the user's call.

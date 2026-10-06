@@ -13,6 +13,7 @@ import type {
   EdgeKindId,
   GroupData,
   NodeTypeId,
+  ProjectBrief,
   RelationData,
   SaveStatus,
 } from '../types';
@@ -27,6 +28,8 @@ const CARD_DRAG_HANDLE = '.card-node__bar';
 const GROUP_DRAG_HANDLE = '.group-frame__header';
 const GROUP_PADDING = 44;
 const DEFAULT_CARD_HEIGHT = 96;
+
+export const EMPTY_BRIEF: ProjectBrief = { name: '', description: '', users: '', context: '', stage: '', notes: '' };
 
 function isCard(n: AnyNode): n is CardNode {
   return n.type === 'card';
@@ -46,9 +49,10 @@ function toRFNodes(doc: BoardDocument): AnyNode[] {
   });
 }
 
-function toDocument(nodes: AnyNode[], edges: RelationEdgeType[]): BoardDocument {
+function toDocument(nodes: AnyNode[], edges: RelationEdgeType[], brief: ProjectBrief): BoardDocument {
   return {
     version: 1,
+    brief,
     nodes: nodes.map((n): BoardNode => {
       if (isGroup(n)) {
         return { id: n.id, type: 'group', position: n.position, width: n.width ?? CARD_WIDTH, height: n.height ?? DEFAULT_CARD_HEIGHT, data: n.data };
@@ -138,6 +142,7 @@ export function useBoardState() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<RelationEdgeType>(
     initial.current.edges.map((e) => ({ id: e.id, type: 'relation', source: e.source, target: e.target, data: { ...e.data } })),
   );
+  const [brief, setBrief] = useState<ProjectBrief>({ ...EMPTY_BRIEF, ...initial.current.brief });
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [crossTabNotice, setCrossTabNotice] = useState(false);
@@ -202,7 +207,7 @@ export function useBoardState() {
     setSaveStatus('saving');
     if (saveTimer.current !== undefined) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
-      const result = saveBoard(toDocument(nodes, edges));
+      const result = saveBoard(toDocument(nodes, edges, brief));
       if (result.ok) {
         setSaveStatus('saved');
         setSaveError(null);
@@ -215,7 +220,7 @@ export function useBoardState() {
       if (saveTimer.current !== undefined) window.clearTimeout(saveTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodes, edges]);
+  }, [nodes, edges, brief]);
 
   // ---- cross-tab awareness ----
   useEffect(() => {
@@ -231,6 +236,7 @@ export function useBoardState() {
       skipNextSave.current = true;
       groupsFittedOnLoad.current = false;
       setNodes(toRFNodes(doc));
+      setBrief({ ...EMPTY_BRIEF, ...doc.brief });
       setEdges(doc.edges.map((e) => ({ id: e.id, type: 'relation', source: e.source, target: e.target, data: { ...e.data } })));
     },
     [setNodes, setEdges],
@@ -354,12 +360,18 @@ export function useBoardState() {
   );
 
   const exportBoard = useCallback(() => {
-    downloadBoard(toDocument(nodes, edges));
-  }, [nodes, edges]);
+    downloadBoard(toDocument(nodes, edges, brief));
+  }, [nodes, edges, brief]);
+
+  const updateBrief = useCallback((patch: Partial<ProjectBrief>) => {
+    setBrief((prev) => ({ ...prev, ...patch }));
+  }, []);
 
   return {
     nodes,
     edges,
+    brief,
+    updateBrief,
     onNodesChange,
     onEdgesChange,
     gapIds,

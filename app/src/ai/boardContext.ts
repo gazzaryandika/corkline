@@ -1,5 +1,6 @@
 import { EDGE_KINDS, NODE_TYPES } from '../config';
 import type { AnyNode, CardNode, RelationEdgeType } from '../state/useBoardState';
+import type { ProjectBrief } from '../types';
 
 const MAX_CONTEXT_CHARS = 40_000;
 
@@ -58,4 +59,21 @@ export function describeBoard(nodes: AnyNode[], edges: RelationEdgeType[], gapId
   ].join('\n');
 
   return text.length > MAX_CONTEXT_CHARS ? `${text.slice(0, MAX_CONTEXT_CHARS)}\n…(board truncated)` : text;
+}
+
+const BRIEF_FIELDS: Array<[keyof ProjectBrief, string]> = [
+  ['name', 'Project name'],
+  ['description', 'Description'],
+  ['users', 'Intended users'],
+  ['context', 'Client / setting'],
+  ['stage', 'Current stage'],
+  ['notes', 'Other notes from the designer'],
+];
+
+/** Writes the project brief as text; empty fields are left out. */
+export function describeBrief(brief: ProjectBrief): string {
+  const lines = BRIEF_FIELDS.filter(([key]) => brief[key].trim()).map(
+    ([key, label]) => `${label}: ${brief[key].trim().replace(/\n/g, '\n  ')}`,
+  );
+  return lines.length ? lines.join('\n') : 'No project brief has been filled in yet.';
 }
