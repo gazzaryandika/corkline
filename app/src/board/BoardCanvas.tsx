@@ -272,11 +272,13 @@ export function BoardCanvas({ board, highlightedNoteId, onHighlightNote }: Board
       focusEdgeIds,
       dropTargetGroupId,
       updateNoteTitle: board.updateNoteTitle,
+      updateNoteBody: board.updateNoteBody,
       highlightedNoteId,
     }),
     [
       dropTargetGroupId,
       board.updateNoteTitle,
+      board.updateNoteBody,
       highlightedNoteId,
       board.gapIds,
       board.laneById,

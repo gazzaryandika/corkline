@@ -268,6 +268,11 @@
   background: transparent;
   padding: 0;
   width: 100%;
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  display: block;
 }
 
 .card-node__title::placeholder {

@@ -649,6 +649,13 @@ export function useBoardState(projectId: string) {
     [setNodes],
   );
 
+  const updateNoteBody = useCallback(
+    (id: string, body: string) => {
+      setNodes((prev) => prev.map((n) => (isNote(n) && n.id === id ? { ...n, data: { ...n.data, body } } : n)));
+    },
+    [setNodes],
+  );
+
   /** Puts accepted AI themes on the board as group frames. Returns the frame ids. */
   const createThemes = useCallback(
     (themes: ThemeToCreate[]) => {
@@ -774,6 +781,7 @@ export function useBoardState(projectId: string) {
     createThemes,
     addNote,
     updateNoteTitle,
+    updateNoteBody,
     updateGroupLabel,
   };
 }

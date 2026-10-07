@@ -21,6 +21,7 @@ export interface BoardContextValue {
   /** The frame a card being dragged would join if dropped now. */
   dropTargetGroupId: string | null;
   updateNoteTitle: (id: string, title: string) => void;
+  updateNoteBody: (id: string, body: string) => void;
   /** The summary note whose cards are highlighted right now. */
   highlightedNoteId: string | null;
 }
