@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNodesState, useEdgesState, applyNodeChanges, type Node, type Edge, type NodeChange } from '@xyflow/react';
 import { CARD_WIDTH, NODE_TYPE_ORDER } from '../config';
+import { GRID_NOTES_X, GRID_ROW_GAP, cardSlot, estimateCardHeight, frameSlot, gridTop, type Box } from '../lib/grid';
 import { computeGapIds } from '../lib/gaps';
 import { computeParallelLanes } from '../lib/parallelEdges';
 import { loadBoard, saveBoard, downloadBoard, exportFilename, projectStorageKey } from '../lib/storage';
@@ -62,11 +63,18 @@ function toRFNodes(doc: BoardDocument): AnyNode[] {
   });
 }
 
-function toDocument(nodes: AnyNode[], edges: RelationEdgeType[], brief: ProjectBrief, sources: SourceDoc[]): BoardDocument {
+function toDocument(
+  nodes: AnyNode[],
+  edges: RelationEdgeType[],
+  brief: ProjectBrief,
+  sources: SourceDoc[],
+  guides: boolean,
+): BoardDocument {
   return {
     version: 1,
     brief,
     sources,
+    layout: { guides },
     nodes: nodes.map((n): BoardNode => {
       if (isGroup(n)) {
         return { id: n.id, type: 'group', position: n.position, width: n.width ?? CARD_WIDTH, height: n.height ?? DEFAULT_CARD_HEIGHT, data: n.data };
@@ -129,40 +137,93 @@ function fitGroupToChildren(nodes: AnyNode[], groupId: string): AnyNode[] {
   });
 }
 
-const DRAFT_COLUMN_GAP = 40;
-const DRAFT_ROW_STEP = 200;
-const DRAFT_MARGIN = 160;
+const DEFAULT_NOTE_HEIGHT = 220;
 
-/** Positions for cards drafted from a document. Each document's cards go in a new
- * band below everything already on the board, so nothing gets covered and the
- * board reads top to bottom in the order documents were added. Every card type has
- * a fixed column (Problem on the left … Assumption on the right), so the same type
- * lines up across documents. */
-function layoutDraftCards(nodes: AnyNode[], types: NodeTypeId[]): Array<{ x: number; y: number }> {
-  const groupPos = new Map(nodes.filter(isGroup).map((g) => [g.id, g.position]));
-  let minX = Infinity;
-  let maxY = -Infinity;
+/** What takes up space on the board, for the grid: loose cards, frames (with the
+ * cards inside them) and notes, each with how many cards it counts as in its lane.
+ * `skip` leaves out nodes that are about to move. */
+function boxesOf(nodes: AnyNode[], skip?: Set<string>): Box[] {
+  const cardsIn = new Map<string, number>();
+  for (const n of nodes) if (isCard(n) && n.parentId) cardsIn.set(n.parentId, (cardsIn.get(n.parentId) ?? 0) + 1);
+  const boxes: Box[] = [];
   for (const n of nodes) {
-    const offset = isCard(n) && n.parentId ? groupPos.get(n.parentId) ?? { x: 0, y: 0 } : { x: 0, y: 0 };
-    const height = isGroup(n) ? n.height ?? DEFAULT_CARD_HEIGHT : n.measured?.height ?? DEFAULT_CARD_HEIGHT;
-    minX = Math.min(minX, offset.x + n.position.x);
-    maxY = Math.max(maxY, offset.y + n.position.y + height);
+    if (skip?.has(n.id) || (isCard(n) && n.parentId)) continue;
+    if (isGroup(n)) {
+      boxes.push({ x: n.position.x, y: n.position.y, w: n.width ?? CARD_WIDTH, h: n.height ?? DEFAULT_CARD_HEIGHT, weight: cardsIn.get(n.id) ?? 0 });
+    } else if (isNote(n)) {
+      boxes.push({ x: n.position.x, y: n.position.y, w: n.measured?.width ?? NOTE_WIDTH, h: n.measured?.height ?? DEFAULT_NOTE_HEIGHT, weight: 0 });
+    } else {
+      boxes.push({ x: n.position.x, y: n.position.y, w: n.measured?.width ?? CARD_WIDTH, h: n.measured?.height ?? DEFAULT_CARD_HEIGHT, weight: 1 });
+    }
   }
-  const originX = Number.isFinite(minX) ? minX : 0;
-  const originY = Number.isFinite(maxY) ? maxY + DRAFT_MARGIN : 0;
+  return boxes;
+}
 
-  const rowInColumn = new Map<NodeTypeId, number>();
-  return types.map((t) => {
-    const row = rowInColumn.get(t) ?? 0;
-    rowInColumn.set(t, row + 1);
-    return {
-      x: originX + NODE_TYPE_ORDER.indexOf(t) * (CARD_WIDTH + DRAFT_COLUMN_GAP),
-      y: originY + row * DRAFT_ROW_STEP,
-    };
+/** Positions for new cards: each goes in its type's lane after what's already there
+ * (and after the ones placed before it in the same batch). */
+function gridSlotsFor(nodes: AnyNode[], cards: Array<{ nodeType: NodeTypeId; height: number }>): Array<{ x: number; y: number }> {
+  const boxes = boxesOf(nodes);
+  const top = gridTop(boxes);
+  return cards.map((c) => {
+    const slot = cardSlot(boxes, c.nodeType, top);
+    boxes.push({ ...slot, w: CARD_WIDTH, h: c.height, weight: 1 });
+    return slot;
   });
 }
 
-const THEME_COLUMN_GAP = 60;
+/** The lane a frame belongs in: the type most of its cards have (ties: the earlier lane). */
+function frameType(nodes: AnyNode[], groupId: string): NodeTypeId {
+  const counts = new Map<NodeTypeId, number>();
+  for (const c of nodes) if (isCard(c) && c.parentId === groupId) counts.set(c.data.nodeType, (counts.get(c.data.nodeType) ?? 0) + 1);
+  let best: NodeTypeId = NODE_TYPE_ORDER[0];
+  for (const t of NODE_TYPE_ORDER) if ((counts.get(t) ?? 0) > (counts.get(best) ?? 0)) best = t;
+  return best;
+}
+
+/**
+ * "Tidy board": moves every loose card, frame and note into the grid. Cards go in
+ * their type's lane, filling its first column (up to CARDS_PER_COLUMN cards) and then
+ * its second; a frame goes in the lane of the type most of its cards have and counts
+ * as its cards; notes go in a column of their own left of Problem. Each lane keeps
+ * its current top-to-bottom order. Cards inside frames move with their frame. Lanes
+ * start at the board's current top, so it doesn't jump far.
+ */
+function tidyNodes(nodes: AnyNode[]): AnyNode[] {
+  const items = nodes.filter((n) => !(isCard(n) && n.parentId));
+  if (items.length === 0) return nodes;
+  const top = gridTop(boxesOf(nodes));
+  const cardsIn =(groupId: string) => nodes.filter((c) => isCard(c) && c.parentId === groupId).length;
+  const heightOf = (n: AnyNode) =>
+    isGroup(n) ? n.height ?? DEFAULT_CARD_HEIGHT : n.measured?.height ?? (isNote(n) ? DEFAULT_NOTE_HEIGHT : DEFAULT_CARD_HEIGHT);
+  const byOrder = (a: AnyNode, b: AnyNode) => a.position.y - b.position.y || a.position.x - b.position.x;
+
+  const placed = new Map<string, { x: number; y: number }>();
+  const placedBoxes: Box[] = [];
+  for (const type of NODE_TYPE_ORDER) {
+    const lane = items
+      .filter((n) => (isCard(n) && n.data.nodeType === type) || (isGroup(n) && frameType(nodes, n.id) === type))
+      .sort(byOrder);
+    for (const n of lane) {
+      if (isGroup(n)) {
+        const w = n.width ?? CARD_WIDTH + GROUP_PADDING * 2;
+        const pos = frameSlot(placedBoxes, type, w, top);
+        placedBoxes.push({ ...pos, w, h: heightOf(n), weight: cardsIn(n.id) });
+        placed.set(n.id, pos);
+      } else {
+        const pos = cardSlot(placedBoxes, type, top);
+        placedBoxes.push({ ...pos, w: CARD_WIDTH, h: heightOf(n), weight: 1 });
+        placed.set(n.id, pos);
+      }
+    }
+  }
+  let noteY = top;
+  for (const n of items.filter(isNote).sort(byOrder)) {
+    placed.set(n.id, { x: GRID_NOTES_X, y: noteY });
+    noteY += heightOf(n) + GRID_ROW_GAP;
+  }
+  return nodes.map((n) => (placed.has(n.id) ? { ...n, position: placed.get(n.id)! } : n));
+}
+
 const THEME_STACK_GAP = 48;
 const THEME_CARD_GAP = 16;
 
@@ -174,36 +235,22 @@ export interface ThemeToCreate {
 }
 
 /**
- * Gathers each theme's cards into a labelled group frame. The frames go in a band
- * below everything that stays where it is, one column per card type (same order as
- * the toolbar), stacked when a type has several themes. Returns the new nodes and
- * `groupIds[i]` is the id for `themes[i]`'s frame (made by the caller, so they're
- * known straight away and stay the same if React runs this update twice).
+ * Gathers each theme's cards into a labelled group frame, placed in its card type's
+ * grid column below whatever else is there (the cards in the frame line up with the
+ * column's loose cards). `groupIds[i]` is the id for `themes[i]`'s frame (made by
+ * the caller, so they're known straight away and stay the same if React runs this
+ * update twice).
  */
 function placeThemes(nodes: AnyNode[], themes: ThemeToCreate[], groupIds: string[]): AnyNode[] {
   const moving = new Set(themes.flatMap((t) => t.cardIds));
-  const groupPos = new Map(nodes.filter(isGroup).map((g) => [g.id, g.position]));
-  const absolute = (n: AnyNode) => {
-    const offset = isCard(n) && n.parentId ? groupPos.get(n.parentId) ?? { x: 0, y: 0 } : { x: 0, y: 0 };
-    return { x: offset.x + n.position.x, y: offset.y + n.position.y };
-  };
   const heightOf = (n: AnyNode) => (isGroup(n) ? n.height ?? DEFAULT_CARD_HEIGHT : n.measured?.height ?? DEFAULT_CARD_HEIGHT);
 
-  // Where the band starts: below whatever isn't moving (or where the moving cards were, if everything moves).
-  const staying = nodes.filter((n) => !moving.has(n.id));
-  const reference = staying.length > 0 ? staying : nodes.filter((n) => moving.has(n.id));
-  let minX = Infinity;
-  let maxY = -Infinity;
-  for (const n of reference) {
-    const p = absolute(n);
-    minX = Math.min(minX, p.x);
-    maxY = Math.max(maxY, p.y + (staying.length > 0 ? heightOf(n) : 0));
-  }
-  const originX = Number.isFinite(minX) ? minX : 0;
-  const originY = Number.isFinite(maxY) ? maxY + (staying.length > 0 ? DRAFT_MARGIN : 0) : 0;
+  // Frames the moving cards leave behind still count as taken space for now; they're
+  // refitted (or removed) below.
+  const boxes = boxesOf(nodes, moving);
+  const top = gridTop(boxes.length > 0 ? boxes : boxesOf(nodes));
 
   const frameWidth = CARD_WIDTH + GROUP_PADDING * 2;
-  const columnY = new Map<NodeTypeId, number>();
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const newGroups: GroupNode[] = [];
   const cardUpdates = new Map<string, { parentId: string; position: { x: number; y: number } }>();
@@ -218,12 +265,12 @@ function placeThemes(nodes: AnyNode[], themes: ThemeToCreate[], groupIds: string
       y += heightOf(card) + THEME_CARD_GAP;
     }
     const height = y - THEME_CARD_GAP + GROUP_PADDING;
-    const top = columnY.get(theme.nodeType) ?? originY;
-    columnY.set(theme.nodeType, top + height + THEME_STACK_GAP);
+    const pos = frameSlot(boxes, theme.nodeType, frameWidth, top);
+    boxes.push({ ...pos, w: frameWidth, h: height, weight: cards.length });
     newGroups.push({
       id: groupId,
       type: 'group',
-      position: { x: originX + NODE_TYPE_ORDER.indexOf(theme.nodeType) * (frameWidth + THEME_COLUMN_GAP), y: top },
+      position: pos,
       width: frameWidth,
       height,
       data: { label: theme.label, description: theme.description },
@@ -332,6 +379,11 @@ export function useBoardState(projectId: string) {
   );
   const [brief, setBrief] = useState<ProjectBrief>({ ...EMPTY_BRIEF, ...initial.current.brief });
   const [sources, setSources] = useState<SourceDoc[]>(initial.current.sources ?? []);
+  // Lane lines and labels: on once the board has been tidied, and from the start on a
+  // board with no cards yet (it follows the grid from its first card).
+  const [guides, setGuides] = useState<boolean>(
+    initial.current.layout?.guides ?? !initial.current.nodes.some((n) => n.type === 'card'),
+  );
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [crossTabNotice, setCrossTabNotice] = useState(false);
@@ -413,11 +465,11 @@ export function useBoardState(projectId: string) {
       return;
     }
     setSaveStatus('saving');
-    pendingDoc.current = toDocument(nodes, edges, brief, sources);
+    pendingDoc.current = toDocument(nodes, edges, brief, sources, guides);
     if (saveTimer.current !== undefined) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(writePending, SAVE_DEBOUNCE_MS);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodes, edges, brief, sources]);
+  }, [nodes, edges, brief, sources, guides]);
 
   // Write any pending change straight away when leaving the board (e.g. back to the
   // projects page) or closing the tab, instead of losing the last half-second of edits.
@@ -453,6 +505,7 @@ export function useBoardState(projectId: string) {
       setNodes(toRFNodes(doc));
       setBrief({ ...EMPTY_BRIEF, ...doc.brief });
       setSources(doc.sources ?? []);
+      setGuides(doc.layout?.guides ?? !doc.nodes.some((n) => n.type === 'card'));
       setEdges(doc.edges.map((e) => ({ id: e.id, type: 'relation', source: e.source, target: e.target, data: { ...e.data } })));
     },
     [setNodes, setEdges, projectId],
@@ -471,15 +524,49 @@ export function useBoardState(projectId: string) {
   const dismissCrossTabNotice = useCallback(() => setCrossTabNotice(false), []);
 
   // ---- CRUD: cards ----
+  // The latest nodes, so a new card's grid slot can be worked out (and returned)
+  // straight away rather than inside a state update.
+  const nodesRef = useRef(nodes);
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
+
+  /** Adds an empty card. Without a position it goes in its type's grid column, below
+   * what's already there. Returns its id and where it went. */
   const addNode = useCallback(
-    (nodeType: NodeTypeId, position: { x: number; y: number }) => {
+    (nodeType: NodeTypeId, position?: { x: number; y: number }) => {
       const id = crypto.randomUUID();
-      const newNode: CardNode = { id, type: 'card', position, data: { nodeType, title: '', body: '' }, dragHandle: CARD_DRAG_HANDLE };
+      const at = position ?? cardSlot(boxesOf(nodesRef.current), nodeType);
+      const newNode: CardNode = { id, type: 'card', position: at, data: { nodeType, title: '', body: '' }, dragHandle: CARD_DRAG_HANDLE };
+      // Count it straight away, so a quick second click lands below it rather than on it.
+      nodesRef.current = [...nodesRef.current, newNode];
       setNodes((prev) => [...prev, newNode]);
-      return id;
+      return { id, position: at };
     },
     [setNodes],
   );
+
+  // ---- Tidy board: sort everything into the grid, with a one-step undo ----
+
+  /** Positions (and whether guides were on) from just before the last tidy, while Undo is offered. */
+  const [tidyUndo, setTidyUndo] = useState<{ positions: Map<string, { x: number; y: number }>; guides: boolean } | null>(null);
+
+  const tidyBoard = useCallback(() => {
+    const positions = new Map(nodesRef.current.filter((n) => !(isCard(n) && n.parentId)).map((n) => [n.id, { ...n.position }]));
+    setTidyUndo({ positions, guides });
+    setNodes((prev) => tidyNodes(prev));
+    setGuides(true);
+  }, [setNodes, guides]);
+
+  const undoTidy = useCallback(() => {
+    if (!tidyUndo) return;
+    const { positions } = tidyUndo;
+    setNodes((prev) => prev.map((n) => (positions.has(n.id) ? { ...n, position: { ...positions.get(n.id)! } } : n)));
+    setGuides(tidyUndo.guides);
+    setTidyUndo(null);
+  }, [tidyUndo, setNodes]);
+
+  const dismissTidyUndo = useCallback(() => setTidyUndo(null), []);
 
   const updateCard = useCallback(
     (id: string, patch: Partial<Pick<CardData, 'nodeType' | 'title' | 'body' | 'link' | 'image'>>) => {
@@ -689,8 +776,8 @@ export function useBoardState(projectId: string) {
   );
 
   const exportBoard = useCallback(() => {
-    downloadBoard(toDocument(nodes, edges, brief, sources), exportFilename(brief.name));
-  }, [nodes, edges, brief, sources]);
+    downloadBoard(toDocument(nodes, edges, brief, sources, guides), exportFilename(brief.name));
+  }, [nodes, edges, brief, sources, guides]);
 
   const updateBrief = useCallback((patch: Partial<ProjectBrief>) => {
     setBrief((prev) => ({ ...prev, ...patch }));
@@ -718,7 +805,10 @@ export function useBoardState(projectId: string) {
     (source: SourceDoc, proposals: CardProposal[]) => {
       const ids = proposals.map(() => crypto.randomUUID());
       setNodes((prev) => {
-        const positions = layoutDraftCards(prev, proposals.map((p) => p.nodeType));
+        const positions = gridSlotsFor(
+          prev,
+          proposals.map((p) => ({ nodeType: p.nodeType, height: estimateCardHeight(p.title, p.body, true) })),
+        );
         const added: CardNode[] = proposals.map((p, i) => ({
           id: ids[i],
           type: 'card',
@@ -775,6 +865,11 @@ export function useBoardState(projectId: string) {
     addNote,
     updateNoteTitle,
     updateGroupLabel,
+    tidyBoard,
+    guides,
+    canUndoTidy: tidyUndo !== null,
+    undoTidy,
+    dismissTidyUndo,
   };
 }
 

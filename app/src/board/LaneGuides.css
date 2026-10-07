@@ -1,0 +1,37 @@
+/* Lane lines and labels sit behind everything on the board and ignore the mouse. */
+.lane-guides {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.lane-guides__line {
+  position: absolute;
+  width: 0;
+  border-left: 2px dashed rgba(28, 25, 23, 0.09);
+}
+
+.lane-guides__label {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 40px;
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--type-color) 55%, transparent);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.lane-guides__dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--type-color) 45%, transparent);
+}

@@ -178,6 +178,9 @@ export interface BoardDocument {
   brief?: ProjectBrief;
   /** Optional so boards saved before documents could be added still load. */
   sources?: SourceDoc[];
+  /** Board display settings. `guides`: show the grid's lane lines and labels (turned on by
+   * "Tidy board", and from the start on new boards). */
+  layout?: { guides?: boolean };
   nodes: BoardNode[];
   edges: Array<{ id: string; type: 'relation'; source: string; target: string; data: RelationData }>;
 }

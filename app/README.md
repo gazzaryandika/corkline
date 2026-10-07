@@ -123,9 +123,9 @@ them. Nothing reaches the board without being accepted.
    all). For text and Word documents Corkline checks each quote really is in the document and marks
    any it can't find with ⚠. PDF, image and audio quotes are marked "not checked automatically".
    Unfinished reviews are saved, so closing the panel loses nothing.
-4. **Add to board**: accepted cards go in a new band below the board, one fixed column per card type,
-   so the board reads top to bottom in the order documents were added. Each card remembers its
-   source (document name + quote), shown on the card and in its full view.
+4. **Add to board**: accepted cards go into the board's grid (see "Grid layout"): each one below the
+   cards already in its type's column. Each card remembers its source (document name + quote), shown
+   on the card and in its full view.
 
 **Links.** Paste a link in the AI Assistant and it offers **Read as source** (with a kind picker); the
 Sources panel has **Add link** too. Both fetch, list and read the link in one go, and the chat shows
@@ -150,6 +150,39 @@ something, the chat still answers it (the chat AI is told it can't open links it
 Adding and reading sources lives in `src/state/useSourceActions.ts` (at board level), so reads keep
 going while the panel is closed and the chat can start them.
 
+## Grid layout
+
+The board has a grid with one **lane** per card type, left to right in `NODE_TYPE_ORDER`
+(`src/config.ts`): **Problem → Assumption → Evidence → Insight → Opportunity → Direction → Prototype**.
+The toolbar, legend and type dropdowns use the same order.
+
+- **Two columns per lane.** Cards fill a lane's first column top to bottom, up to **10 cards**
+  (`CARDS_PER_COLUMN`), then its second column. After 20 a new two-column block starts below, so a busy
+  category stays readable instead of one endless column. A theme frame counts as the cards inside it.
+- **New cards** (toolbar "+ Problem" etc., cards accepted from documents) go in the next spot of their
+  type's lane, so nothing lands on top of anything else. If a new card lands off-screen, the view moves
+  to it. **AI theme frames** are placed the same way.
+- **Lane guides:** faint dashed lines between the lanes and a label at the top of each ("● PROBLEM" …),
+  drawn behind the cards (`src/board/LaneGuides.tsx`, via React Flow's `ViewportPortal`). On a new board
+  they appear as soon as the first card is added; older boards with scattered cards get them once tidied
+  (so lines don't cut through a free layout). Saved per board as `layout.guides`; hidden while a board
+  has no cards.
+- Cards can still be dragged anywhere; the grid only decides where things first appear.
+- **⊞ Tidy board** (toolbar) sorts the whole board into the lanes: loose cards into their type's lane,
+  each frame into the lane of the type most of its cards have, summary notes into a column of their own
+  left of Problem. Each lane keeps its current top-to-bottom order. Click it twice to confirm (it turns
+  amber, "⊞ Confirm tidy", for 5 seconds; an in-page confirm because the desktop app's preview pane blocks
+  `window.confirm`). It turns the guides on, and a banner offers **Undo** for 30 seconds, which puts
+  every position (and the guides setting) back exactly as it was.
+
+Code: `src/lib/grid.ts` (lanes, columns, "next free spot", and a card-height estimate for cards not yet
+drawn); in `src/state/useBoardState.ts`, `boxesOf` (what takes up space, with how many cards each thing
+counts as), `gridSlotsFor`, `tidyNodes`, `tidyBoard` / `undoTidy`. Lanes are 900 px wide, sized so two
+theme frames (328 px each) fit side by side with an 80 px gutter between them and from each divider:
+gutter, frame, gutter, frame, gutter. Loose cards sit where a frame's cards would, so everything in a
+column lines up. A new card's slot is worked out from the latest nodes and counted straight away, so two quick
+clicks on "+ Problem" stack instead of overlapping.
+
 ## Themes: AI-suggested groups of cards
 
 **✦ Find themes** (under the AI Assistant's messages) asks the AI which cards share a theme, like
@@ -166,8 +199,8 @@ one-sentence reason (`note` in the response): "No themes among the 3 selected ca
 
 The chat shows the result ("Found 3 themes among 13 cards") with **Review themes**, which opens
 `src/components/ThemesPanel.tsx`: rename each theme, take cards out (×), accept or reject it. Accepted
-themes become labelled group frames: the cards are gathered into a band below the board, one column per
-card type. The theme's one-line description shows as the frame label's tooltip. Afterwards, right-click a
+themes become labelled group frames, placed in their card type's grid column below what's already there
+(the cards in the frame line up with the column's loose cards). The theme's one-line description shows as the frame label's tooltip. Afterwards, right-click a
 card → **Remove from "…"** takes it out of its frame (`removeFromGroup`); the frame refits, or disappears
 when empty. Frames can still be renamed or removed (×) as before.
 

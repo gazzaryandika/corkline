@@ -4,6 +4,7 @@ import '@xyflow/react/dist/style.css';
 import { CardNode } from './CardNode';
 import { GroupFrame } from './GroupFrame';
 import { NoteNode } from './NoteNode';
+import { LaneGuides } from './LaneGuides';
 import { RelationEdge } from './RelationEdge';
 import { EdgeMarkers } from './EdgeMarkers';
 import { EdgeKindMenu } from './EdgeKindMenu';
@@ -349,6 +350,8 @@ export function BoardCanvas({ board, highlightedNoteId, onHighlightNote }: Board
           snapGrid={SNAP_GRID}
         >
           <Background variant={BackgroundVariant.Dots} gap={26} size={1.4} color="var(--dot-color)" />
+          {/* Lane lines and labels: on tidied (or new) boards, once there's at least one card. */}
+          {board.guides && board.nodes.some((n) => n.type === 'card') && <LaneGuides nodes={board.nodes} />}
         </ReactFlow>
         <EdgeMarkers />
         {armedNode && armedStart && tempEnd && (
