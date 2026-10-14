@@ -8,6 +8,7 @@ import { Banner } from './components/Banner';
 import { ChatPanel } from './components/ChatPanel';
 import { SourcesPanel } from './components/SourcesPanel';
 import { ThemesPanel } from './components/ThemesPanel';
+import { TracePanel } from './components/TracePanel';
 import type { ThemeProposal } from './types';
 import { BoardCanvas } from './board/BoardCanvas';
 import { clearNewMarker } from './lib/route';
@@ -32,7 +33,19 @@ export function BoardScreen({ projectId, isNew }: BoardScreenProps) {
   const closeSources = useCallback(() => setSourcesPanel(null), []);
 
   /** The summary note whose cards are highlighted on the board. */
-  const [highlightedNoteId, setHighlightedNoteId] = useState<string | null>(null);
+  const [highlightedNoteId, setHighlightedNoteIdState] = useState<string | null>(null);
+  /** Cards highlighted from the chat (e.g. both ends of a suggested link). */
+  const [previewCardIds, setPreviewCardIdsState] = useState<string[] | null>(null);
+  // Only one highlight at a time.
+  const setHighlightedNoteId = useCallback((id: string | null) => {
+    setHighlightedNoteIdState(id);
+    if (id) setPreviewCardIdsState(null);
+  }, []);
+  const setPreviewCardIds = useCallback((ids: string[] | null) => {
+    setPreviewCardIdsState(ids);
+    if (ids) setHighlightedNoteIdState(null);
+  }, []);
+  const clearPreview = useCallback(() => setPreviewCardIdsState(null), []);
 
   // Themes the AI found and the designer hasn't finished reviewing (kept for this visit only).
   const [themeReview, setThemeReview] = useState<{ themes: ThemeProposal[]; model: string } | null>(null);
@@ -50,6 +63,12 @@ export function BoardScreen({ projectId, isNew }: BoardScreenProps) {
     setThemeReview(null);
     setThemesOpen(false);
   }, []);
+
+  /** The trace check panel (from the gaps pill in the toolbar). */
+  const [traceOpen, setTraceOpen] = useState(false);
+  /** A request for the chat to run as link suggestions (e.g. a route from the trace check). */
+  const [chatRequest, setChatRequest] = useState<{ id: string; text: string } | null>(null);
+  const askRoute = useCallback((text: string) => setChatRequest({ id: crypto.randomUUID(), text }), []);
 
   useEffect(() => {
     if (isNew) clearNewMarker(projectId);
@@ -72,7 +91,9 @@ export function BoardScreen({ projectId, isNew }: BoardScreenProps) {
   return (
     <ReactFlowProvider>
       <div className="app-shell">
-        <Toolbar board={board} initialBriefOpen={isNew} onOpenSources={openSources} readingCount={sourceActions.readingCount} />
+        <Toolbar board={board} initialBriefOpen={isNew} onOpenSources={openSources} readingCount={sourceActions.readingCount}
+          onOpenTrace={() => setTraceOpen((open) => !open)}
+        />
         {board.saveStatus === 'error' && (
           <Banner tone="error">
             Changes aren&rsquo;t saving ({board.saveError}) — use Export in the toolbar to back up your work now.
@@ -93,7 +114,13 @@ export function BoardScreen({ projectId, isNew }: BoardScreenProps) {
           </Banner>
         )}
         <main className="app-main">
-          <BoardCanvas board={board} highlightedNoteId={highlightedNoteId} onHighlightNote={setHighlightedNoteId} />
+          <BoardCanvas
+            board={board}
+            highlightedNoteId={highlightedNoteId}
+            onHighlightNote={setHighlightedNoteId}
+            previewCardIds={previewCardIds}
+            onClearPreview={clearPreview}
+          />
           {isEmpty && (
             <div className="board-empty">
               <p className="board-empty__title">This board is empty</p>
@@ -104,6 +131,9 @@ export function BoardScreen({ projectId, isNew }: BoardScreenProps) {
             </div>
           )}
           <Legend />
+          {traceOpen && (
+            <TracePanel board={board} onClose={() => setTraceOpen(false)} onShowCards={setPreviewCardIds} onAskRoute={askRoute} />
+          )}
           <ChatPanel
             board={board}
             sourceActions={sourceActions}
@@ -112,6 +142,8 @@ export function BoardScreen({ projectId, isNew }: BoardScreenProps) {
             onThemesFound={handleThemesFound}
             onOpenThemes={() => setThemesOpen(true)}
             onShowNote={setHighlightedNoteId}
+            onPreviewCards={setPreviewCardIds}
+            linkRequest={chatRequest}
           />
         </main>
         {sourcesPanel && (

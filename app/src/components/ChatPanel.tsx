@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { NODE_TYPES } from '../config';
+import { NODE_TYPE_ORDER, NODE_TYPES } from '../config';
 import { askAi, fetchAiStatus, type AiStatus, type AiTurn } from '../ai/client';
 import { describeBoard, describeBrief, describeSources } from '../ai/boardContext';
 import { useAiMode } from '../ai/mode';
 import { CHAT_SYSTEM_PROMPT } from '../ai/prompts';
 import { stripMarkdown } from '../ai/plainText';
 import { ModelPicker } from './ModelPicker';
-import { SOURCE_KIND_ORDER, SOURCE_KINDS } from '../config';
+import { EDGE_KIND_ORDER, EDGE_KINDS, SOURCE_KIND_ORDER, SOURCE_KINDS } from '../config';
 import { displayLink, findLinks, isYouTube, withoutLinks } from '../lib/links';
 import type { SourceActions } from '../state/useSourceActions';
 import type { BoardState, CardNode } from '../state/useBoardState';
 import { findThemes } from '../ai/themes';
 import { summarise } from '../ai/summary';
-import type { SourceDoc, SourceKindId, ThemeProposal } from '../types';
+import { linkExists, proposeConnections, type LinkProposal } from '../ai/connections';
+import type { EdgeKindId, SourceDoc, SourceKindId, ThemeProposal } from '../types';
 import './ChatPanel.css';
 
 /** How many earlier chat turns are sent along, so follow-up questions make sense. */
@@ -65,6 +66,35 @@ interface SummaryRun {
   error?: string;
 }
 
+/** A request for links between cards, and its review. Not sent to the model as chat. */
+interface LinksRun {
+  id: string;
+  role: 'links';
+  status: 'finding' | 'review' | 'done' | 'error';
+  /** What the designer asked, kept for Retry. */
+  request: string;
+  selectedIds: string[];
+  links: LinkProposal[];
+  /** The AI's question when the request was ambiguous. */
+  question?: string;
+  note?: string;
+  model?: string;
+  /** Suggestions left out because they skipped a column. */
+  skipped?: number;
+  added?: number;
+  error?: string;
+}
+
+/** "Connect these","link the coins evidence to…", "this evidence supports the insight",
+ * "which evidence supports X?", "find connections"… */
+function isConnectionRequest(text: string): boolean {
+  const t = text.toLowerCase().trim();
+  const explicit = /\b(connect\w*|link(s|ed|ing)?|relationships?|arrows?)\b/;
+  const kinds = /\b(supports?|supporting|contradicts?|contradicting|leads? to|tests?|testing)\b/;
+  const action = /\b(add|draw|make|create|mark|find|suggest|show|which|what|should)\b/;
+  return explicit.test(t) || (kinds.test(t) && (action.test(t) || /^(this|these|that|those|the)\b/.test(t)));
+}
+
 /** "Summarise these", "give me a summary of the board", "recap", "tl;dr"… */
 function isSummaryRequest(text: string): boolean {
   return /\b(summar(y|ies|ise|ize|ised|ized|ising|izing)|sum (it |this |these |them )?up|recap|tl;?dr)\b/i.test(text);
@@ -85,7 +115,8 @@ type ChatMessage =
   | { id: string; role: 'error'; text: string }
   | LinkOffer
   | ThemesRun
-  | SummaryRun;
+  | SummaryRun
+  | LinksRun;
 
 interface ChatPanelProps {
   board: BoardState;
@@ -98,6 +129,10 @@ interface ChatPanelProps {
   onOpenThemes: () => void;
   /** Highlights a summary note's cards on the board (and shows them). */
   onShowNote: (noteId: string) => void;
+  /** Highlights these cards on the board (and shows them); null clears. */
+  onPreviewCards: (cardIds: string[] | null) => void;
+  /** A link request from elsewhere (the trace check), run as soon as it arrives. */
+  linkRequest?: { id: string; text: string } | null;
 }
 
 export function ChatPanel({
@@ -108,6 +143,8 @@ export function ChatPanel({
   onThemesFound,
   onOpenThemes,
   onShowNote,
+  onPreviewCards,
+  linkRequest,
 }: ChatPanelProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -122,6 +159,13 @@ export function ChatPanel({
   const selectedCards: AttachedCard[] = board.nodes
     .filter((n): n is CardNode => n.type === 'card' && !!n.selected)
     .map((n) => ({ id: n.id, title: n.data.title || `${NODE_TYPES[n.data.nodeType].label} — untitled`, nodeType: n.data.nodeType }));
+
+  /** Every card by id, for showing suggested links by their cards' titles. */
+  const cardsById = new Map(
+    board.nodes
+      .filter((n): n is CardNode => n.type === 'card')
+      .map((n) => [n.id, { title: n.data.title.trim() || `${NODE_TYPES[n.data.nodeType].label}, untitled`, nodeType: n.data.nodeType }]),
+  );
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
@@ -143,7 +187,7 @@ export function ChatPanel({
       // The current board goes with the newest question only, so the model always
       // sees the latest state rather than stale copies from earlier turns.
       const last = turns[turns.length - 1];
-      const boardText = describeBoard(board.nodes, board.edges, board.gapIds);
+      const boardText = describeBoard(board.nodes, board.edges, board.traceIssues);
       const briefText = describeBrief(board.brief);
       const sourcesText = describeSources(board.sources);
       turns[turns.length - 1] = {
@@ -161,7 +205,7 @@ export function ChatPanel({
         setIsTyping(false);
       }
     },
-    [board.nodes, board.edges, board.gapIds, board.brief, board.sources, mode],
+    [board.nodes, board.edges, board.traceIssues, board.brief, board.sources, mode],
   );
 
   const findingThemes = messages.some((m) => m.role === 'themes' && m.status === 'finding');
@@ -204,7 +248,7 @@ export function ChatPanel({
       if (existingId) patch({ status: 'writing', error: undefined });
       else setMessages((prev) => [...prev, { id, role: 'summary', status: 'writing', selectedIds }]);
       try {
-        const result = await summarise(mode, board.nodes, board.edges, board.gapIds, board.brief, selectedIds);
+        const result = await summarise(mode, board.nodes, board.edges, board.traceIssues, board.brief, selectedIds);
         const noteId = board.addNote({
           title: result.title,
           body: result.body,
@@ -221,6 +265,63 @@ export function ChatPanel({
       }
     },
     [mode, board, onShowNote],
+  );
+
+  const findingLinks = messages.some((m) => m.role === 'links' && m.status === 'finding');
+
+  const patchLinksRun = useCallback((id: string, patch: Partial<LinksRun> | ((run: LinksRun) => Partial<LinksRun>)) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === id && m.role === 'links' ? { ...m, ...(typeof patch === 'function' ? patch(m) : patch) } : m)),
+    );
+  }, []);
+
+  /** Asks the AI for links answering `request` (involving the selection, if any).
+   * `existingId` retries a run. */
+  const runConnections = useCallback(
+    async (request: string, selectedIds: string[], existingId?: string) => {
+      const id = existingId ?? crypto.randomUUID();
+      if (existingId) patchLinksRun(id, { status: 'finding', error: undefined });
+      else setMessages((prev) => [...prev, { id, role: 'links', status: 'finding', request, selectedIds, links: [] }]);
+      try {
+        const result = await proposeConnections(mode, request, board.nodes, board.edges, board.traceIssues, board.brief, selectedIds);
+        patchLinksRun(id, {
+          status: result.links.length > 0 ? 'review' : 'done',
+          links: result.links,
+          question: result.question,
+          note: result.note,
+          model: result.model,
+          skipped: result.skipped,
+        });
+      } catch (err) {
+        patchLinksRun(id, { status: 'error', error: (err as Error).message });
+      }
+    },
+    [mode, board.nodes, board.edges, board.traceIssues, board.brief, patchLinksRun],
+  );
+
+  // Run a link request from elsewhere once (by its id), with the chat open.
+  const handledRequest = useRef<string | null>(null);
+  useEffect(() => {
+    if (!linkRequest || handledRequest.current === linkRequest.id) return;
+    handledRequest.current = linkRequest.id;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCollapsed(false);
+    setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', text: linkRequest.text }]);
+    void runConnections(linkRequest.text, []);
+  }, [linkRequest, runConnections]);
+
+  /** Draws the accepted links of a run (skipping any that now exist) and closes its review. */
+  const addAcceptedLinks = useCallback(
+    (run: LinksRun) => {
+      const cardIds = new Set(board.nodes.filter((n) => n.type === 'card').map((n) => n.id));
+      const toAdd = run.links.filter(
+        (l) => l.decision === 'accepted' && cardIds.has(l.source) && cardIds.has(l.target) && !linkExists(board.edges, l.source, l.target, l.kind),
+      );
+      for (const l of toAdd) board.addRelation(l.source, l.target, l.kind);
+      patchLinksRun(run.id, { status: 'done', added: toAdd.length });
+      onPreviewCards(toAdd.length > 0 ? [...new Set(toAdd.flatMap((l) => [l.source, l.target]))] : null);
+    },
+    [board, patchLinksRun, onPreviewCards],
   );
 
   const handleSend = useCallback(() => {
@@ -256,8 +357,25 @@ export function ChatPanel({
       void runSummary(selection);
       return;
     }
+    // "Connect these", "this evidence supports …": proposes links to review, not a chat answer.
+    if (offers.length === 0 && isConnectionRequest(text) && !findingLinks) {
+      void runConnections(text, selection ?? []);
+      return;
+    }
     if (offers.length === 0 || withoutLinks(text).length > 0) void run(next);
-  }, [draft, isTyping, messages, selectedCards, run, runThemes, findingThemes, runSummary, writingSummary]);
+  }, [
+    draft,
+    isTyping,
+    messages,
+    selectedCards,
+    run,
+    runThemes,
+    findingThemes,
+    runSummary,
+    writingSummary,
+    runConnections,
+    findingLinks,
+  ]);
 
   const patchLink = useCallback((id: string, patch: Partial<LinkOffer>) => {
     setMessages((prev) => prev.map((m) => (m.id === id && m.role === 'link' ? { ...m, ...patch } : m)));
@@ -344,7 +462,21 @@ export function ChatPanel({
               </p>
             )}
             {messages.map((m) =>
-              m.role === 'summary' ? (
+              m.role === 'links' ? (
+                <LinksRunCard
+                  key={m.id}
+                  run={m}
+                  cards={cardsById}
+                  onChange={(update) => patchLinksRun(m.id, (r) => ({ links: update(r.links) }))}
+                  onPreview={onPreviewCards}
+                  onAdd={() => addAcceptedLinks(m)}
+                  onCancel={() => {
+                    patchLinksRun(m.id, { status: 'done', added: 0 });
+                    onPreviewCards(null);
+                  }}
+                  onRetry={() => void runConnections(m.request, m.selectedIds, m.id)}
+                />
+              ) : m.role === 'summary' ? (
                 <SummaryRunCard
                   key={m.id}
                   run={m}
@@ -424,6 +556,23 @@ export function ChatPanel({
               title="Write a summary as a yellow note on the board. Select cards first to summarise just those."
             >
               ✦ Summarise {selectedCards.length > 0 ? `${selectedCards.length} selected` : 'board'}
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                void runConnections(
+                  selectedCards.length > 0
+                    ? selectedCards.length === 2
+                      ? 'Connect these two cards.'
+                      : 'Find links involving the selected cards.'
+                    : 'Find the clearest missing links on the board, starting with cards marked GAP.',
+                  selectedCards.map((c) => c.id),
+                )
+              }
+              disabled={findingLinks}
+              title="Ask the AI to suggest links (Leads to, Supports, Tests, Contradicts) for you to review. Select cards first to link just those, or type e.g. 'this evidence supports the insight about …'."
+            >
+              ✦ {selectedCards.length === 2 ? 'Connect these 2' : 'Find connections'}
             </button>
           </div>
 
@@ -667,6 +816,168 @@ function SummaryRunCard({ run, noteExists, onShow, onRetry }: SummaryRunCardProp
               Retry
             </button>
           </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+interface LinksRunCardProps {
+  run: LinksRun;
+  cards: Map<string, { title: string; nodeType: keyof typeof NODE_TYPES }>;
+  onChange: (update: (links: LinkProposal[]) => LinkProposal[]) => void;
+  /** Highlight a suggestion's two cards on the board (null clears). */
+  onPreview: (cardIds: string[] | null) => void;
+  onAdd: () => void;
+  onCancel: () => void;
+  onRetry: () => void;
+}
+
+/** Suggested links in the chat: each can be retyped, flipped, accepted or rejected, and
+ * clicked to show its two cards on the board. Nothing is drawn until "Add links". */
+function LinksRunCard({ run, cards, onChange, onPreview, onAdd, onCancel, onRetry }: LinksRunCardProps) {
+  const patch = (id: string, change: Partial<LinkProposal>) =>
+    onChange((links) => links.map((l) => (l.id === id ? { ...l, ...change } : l)));
+  const live = run.links.filter((l) => cards.has(l.source) && cards.has(l.target));
+  const accepted = live.filter((l) => l.decision === 'accepted').length;
+  const undecided = live.filter((l) => l.decision === 'pending').length;
+  const skippedNote = run.skipped
+    ? ` Left out ${run.skipped} that skipped a step (links go one column at a time, e.g. Assumption → Evidence → Insight).`
+    : '';
+
+  const cardChip = (id: string) => {
+    const c = cards.get(id)!;
+    return (
+      <span className="link-prop__card" title={c.title}>
+        <span className="chat-chip__dot" style={{ background: NODE_TYPES[c.nodeType].color }} />
+        <span className="link-prop__type">{NODE_TYPES[c.nodeType].label}</span>
+        <span className="link-prop__title">{c.title}</span>
+      </span>
+    );
+  };
+
+  return (
+    <div className={`chat-link chat-links is-${run.status}`}>
+      <div className="chat-link__head">
+        <span className="chat-link__label">✦ Connections</span>
+      </div>
+
+      {run.status === 'finding' && (
+        <p className="chat-link__progress">
+          <span className="chat-link__spinner" aria-hidden />
+          Looking for links…
+        </p>
+      )}
+
+      {run.status === 'error' && (
+        <>
+          <p className="chat-link__error">{run.error}</p>
+          <div className="chat-link__actions">
+            <button type="button" onClick={onRetry}>
+              Retry
+            </button>
+          </div>
+        </>
+      )}
+
+      {run.status === 'done' && (
+        <p className={run.added ? '' : 'chat-link__muted'}>
+          {run.added
+            ? `Added ${run.added} ${run.added === 1 ? 'link' : 'links'} to the board.`
+            : run.question
+              ? run.question
+              : run.links.length === 0
+                ? `No links to suggest.${run.note ? ` ${run.note}` : ''}${skippedNote}`
+                : 'No links added.'}
+        </p>
+      )}
+
+      {run.status === 'review' && (
+        <>
+          <p>
+            {live.length} suggested {live.length === 1 ? 'link' : 'links'}. Click one to see its cards on the board.
+            {skippedNote}
+          </p>
+          <ul className="link-props">
+            {live.map((l) => {
+              // Read left to right, like the board: if the link points at a card from an
+              // earlier lane (e.g. Evidence supports a Problem), show that card first with
+              // the wording turned round ("Problem — Supported by → Evidence").
+              const order = (id: string) => NODE_TYPE_ORDER.indexOf(cards.get(id)!.nodeType);
+              const reversed = order(l.target) < order(l.source);
+              const [left, right] = reversed ? [l.target, l.source] : [l.source, l.target];
+              return (
+              <li key={l.id} className={`link-prop is-${l.decision}`}>
+                <button type="button" className="link-prop__show" onClick={() => onPreview([l.source, l.target])}>
+                  {cardChip(left)}
+                </button>
+                <div className="link-prop__kind">
+                  <select
+                    value={l.kind}
+                    aria-label="Link type"
+                    style={{ color: EDGE_KINDS[l.kind].color }}
+                    onChange={(e) => patch(l.id, { kind: e.target.value as EdgeKindId })}
+                  >
+                    {EDGE_KIND_ORDER.map((k) => (
+                      <option key={k} value={k}>
+                        {EDGE_KINDS[k].arrow ? `${reversed ? EDGE_KINDS[k].reverseLabel : EDGE_KINDS[k].label} →` : `${EDGE_KINDS[k].label} ↔`}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="link-prop__swap"
+                    title="Flip the direction"
+                    onClick={() => patch(l.id, { source: l.target, target: l.source })}
+                  >
+                    ⇅
+                  </button>
+                </div>
+                <button type="button" className="link-prop__show" onClick={() => onPreview([l.source, l.target])}>
+                  {cardChip(right)}
+                </button>
+                {l.reason && <p className="link-prop__reason">{l.reason}</p>}
+                <div className="link-prop__decide">
+                  <button
+                    type="button"
+                    className={l.decision === 'rejected' ? 'is-on is-reject' : ''}
+                    aria-pressed={l.decision === 'rejected'}
+                    onClick={() => patch(l.id, { decision: l.decision === 'rejected' ? 'pending' : 'rejected' })}
+                  >
+                    ✕ Reject
+                  </button>
+                  <button
+                    type="button"
+                    className={l.decision === 'accepted' ? 'is-on is-accept' : ''}
+                    aria-pressed={l.decision === 'accepted'}
+                    onClick={() => patch(l.id, { decision: l.decision === 'accepted' ? 'pending' : 'accepted' })}
+                  >
+                    ✓ Accept
+                  </button>
+                </div>
+              </li>
+              );
+            })}
+          </ul>
+          <div className="chat-link__actions">
+            <button type="button" onClick={() => onChange((links) => links.map((l) => ({ ...l, decision: 'accepted' })))}>
+              Accept all
+            </button>
+            {accepted === 0 && undecided === 0 ? (
+              <button type="button" className="chat-link__primary" onClick={onCancel}>
+                Done (all rejected)
+              </button>
+            ) : (
+              <button type="button" className="chat-link__primary" disabled={accepted === 0} onClick={onAdd}>
+                {accepted > 0 ? `Add ${accepted} ${accepted === 1 ? 'link' : 'links'}` : 'Add links'}
+              </button>
+            )}
+          </div>
+          {accepted > 0 && undecided > 0 && (
+            <p className="chat-link__muted">
+              {undecided} not decided; {undecided === 1 ? 'it' : 'they'} won&rsquo;t be added.
+            </p>
+          )}
         </>
       )}
     </div>

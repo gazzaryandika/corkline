@@ -26,14 +26,28 @@ function anchor(node: InternalNode<Node>, side: 'left' | 'right'): Anchor {
 export function RelationEdge({ id, source, target, data }: EdgeProps<RelationEdgeType>) {
   const sourceNode = useInternalNode(source);
   const targetNode = useInternalNode(target);
-  const { deleteEdge, laneById, focusEdgeIds } = useBoardContext();
+  const { deleteEdge, laneById, focusEdgeIds, onEdgeClick, highlightedEdgeId, skipLinkIds } = useBoardContext();
+  // A link that skips a step (lib/trace.ts): kept, but drawn as a warning until it's fixed.
+  const isSkip = skipLinkIds.has(id);
   const isFocused = focusEdgeIds !== null && focusEdgeIds.has(id);
   const isDimmed = focusEdgeIds !== null && !isFocused;
+  const isTraced = highlightedEdgeId === id;
   const [confirming, setConfirming] = useState(false);
   const timer = useRef<number | undefined>(undefined);
 
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent) => {
+  // Clicking a line (or its label) traces its path: the cards it joins and everything
+  // leading into and out of them, left to right.
+  const handleTrace = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onEdgeClick(id);
+    },
+    [onEdgeClick, id],
+  );
+
+  // Deleting goes through the small × shown on a traced line's label: click, then confirm.
+  const handleDelete = useCallback(
+    (e: React.MouseEvent) => {
       e.stopPropagation();
       if (!confirming) {
         setConfirming(true);
@@ -49,9 +63,15 @@ export function RelationEdge({ id, source, target, data }: EdgeProps<RelationEdg
   if (!sourceNode || !targetNode || !data) return null;
 
   const cfg = EDGE_KINDS[data.kind];
-  const leftToRight = sourceNode.internals.positionAbsolute.x <= targetNode.internals.positionAbsolute.x;
-  const p1 = anchor(sourceNode, leftToRight ? 'right' : 'left');
-  const p2 = anchor(targetNode, leftToRight ? 'left' : 'right');
+  // Lines always run left to right, so the board reads Problem → … → Prototype. A link
+  // whose meaning points at a card further left (e.g. Evidence supports a Problem) is
+  // drawn from that card instead, with its wording turned round ("Supported by").
+  const reversed = targetNode.internals.positionAbsolute.x < sourceNode.internals.positionAbsolute.x;
+  const leftNode = reversed ? targetNode : sourceNode;
+  const rightNode = reversed ? sourceNode : targetNode;
+  const p1 = anchor(leftNode, 'right');
+  const p2 = anchor(rightNode, 'left');
+  const kindLabel = reversed ? cfg.reverseLabel : cfg.label;
 
   const laneInfo = laneById.get(id) ?? { index: 0, count: 1 };
   const lane = laneInfo.count > 1 ? laneInfo.index - (laneInfo.count - 1) / 2 : 0;
@@ -59,12 +79,12 @@ export function RelationEdge({ id, source, target, data }: EdgeProps<RelationEdg
 
   const path = bezierPath(p1.x, p1.y + offset, p2.x, p2.y + offset, p1.dir, p2.dir);
   const mid = bezierMidpoint(p1.x, p1.y + offset, p2.x, p2.y + offset, p1.dir, p2.dir);
-  const labelText = confirming ? 'DELETE?' : cfg.label.toUpperCase();
-  const labelColor = confirming ? '#dc2626' : cfg.color;
+  const labelText = kindLabel.toUpperCase();
+  const labelColor = cfg.color;
 
   return (
     <>
-      <path d={path} className="relation-edge-hit" />
+      <path d={path} className="relation-edge-hit" onClick={handleTrace} />
       <path
         d={path}
         fill="none"
@@ -74,6 +94,7 @@ export function RelationEdge({ id, source, target, data }: EdgeProps<RelationEdg
         className={[
           'relation-edge',
           data.kind === 'contradicts' && 'is-contradicts',
+          isSkip && 'is-skip',
           isFocused && 'is-focus-highlight',
           isDimmed && 'is-focus-dim',
         ]
@@ -84,10 +105,9 @@ export function RelationEdge({ id, source, target, data }: EdgeProps<RelationEdg
         markerEnd={cfg.arrow ? `url(#arrow-${data.kind})` : 'url(#tension-diamond)'}
       />
       <EdgeLabelRenderer>
-        <button
-          type="button"
+        <div
           className={[
-            'relation-edge__label',
+            'relation-edge__label-wrap',
             'nodrag',
             'nopan',
             isFocused && 'is-focus-highlight',
@@ -95,16 +115,32 @@ export function RelationEdge({ id, source, target, data }: EdgeProps<RelationEdg
           ]
             .filter(Boolean)
             .join(' ')}
-          style={{
-            transform: `translate(-50%, -50%) translate(${mid.x}px, ${mid.y}px)`,
-            borderColor: labelColor,
-            color: labelColor,
-          }}
-          onPointerDown={handlePointerDown}
-          title={confirming ? 'Click again to delete' : `Click twice to delete "${cfg.label}"`}
+          style={{ transform: `translate(-50%, -50%) translate(${mid.x}px, ${mid.y}px)` }}
         >
-          {labelText}
-        </button>
+          <button
+            type="button"
+            className={`relation-edge__label${isTraced ? ' is-traced' : ''}${isSkip ? ' is-skip' : ''}`}
+            style={{ borderColor: labelColor, color: labelColor }}
+            onClick={handleTrace}
+            title={
+              (isSkip ? 'This link skips a step in the trace. See the trace check (gaps count in the toolbar) to fix it.\n' : '') +
+              (isTraced ? 'Click again to stop highlighting' : `"${kindLabel}": click to highlight this path`)
+            }
+          >
+            {isSkip && '⚠ '}
+            {labelText}
+          </button>
+          {isTraced && (
+            <button
+              type="button"
+              className={`relation-edge__delete${confirming ? ' is-confirming' : ''}`}
+              onClick={handleDelete}
+              title={confirming ? 'Click again to delete this link' : 'Delete this link'}
+            >
+              {confirming ? 'Delete?' : '×'}
+            </button>
+          )}
+        </div>
       </EdgeLabelRenderer>
     </>
   );

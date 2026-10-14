@@ -5,6 +5,7 @@ import { AiError, askAi, type AiMode } from './client';
 import { describeBrief } from './boardContext';
 import { THEMES_SYSTEM_PROMPT } from './prompts';
 import { stripMarkdown } from './plainText';
+import { withCardNames } from './connections';
 
 /**
  * Finds themes among the cards on the board: groups of same-type cards that share a
@@ -127,7 +128,7 @@ export async function findThemes(
     model: reply.model,
     considered: free.length,
     alreadyGrouped,
-    note: themes.length === 0 && typeof note === 'string' ? stripMarkdown(note).trim() : '',
+    note: themes.length === 0 && typeof note === 'string' ? withCardNames(stripMarkdown(note), free, refToId).trim() : '',
   };
 }
 

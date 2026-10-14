@@ -7,12 +7,16 @@ interface EdgeKindMenuProps {
   clientY: number;
   onPick: (kind: EdgeKindId) => void;
   onClose: () => void;
+  /** Set when the two cards are more than one step apart: why a step link isn't
+   * allowed. Then only Contradicts is offered. */
+  blockedReason?: string;
 }
 
 const MENU_WIDTH = 168;
+const BLOCKED_WIDTH = 272;
 const ROW_HEIGHT = 32;
 
-export function EdgeKindMenu({ clientX, clientY, onPick, onClose }: EdgeKindMenuProps) {
+export function EdgeKindMenu({ clientX, clientY, onPick, onClose, blockedReason }: EdgeKindMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -34,13 +38,21 @@ export function EdgeKindMenu({ clientX, clientY, onPick, onClose }: EdgeKindMenu
     };
   }, [onClose]);
 
-  const menuHeight = EDGE_KIND_ORDER.length * ROW_HEIGHT + 14;
-  const left = Math.min(clientX + 8, window.innerWidth - MENU_WIDTH - 8);
+  const kinds = blockedReason ? EDGE_KIND_ORDER.filter((k) => k === 'contradicts') : EDGE_KIND_ORDER;
+  const menuHeight = kinds.length * ROW_HEIGHT + 14 + (blockedReason ? 150 : 0);
+  const left = Math.min(clientX + 8, window.innerWidth - (blockedReason ? BLOCKED_WIDTH : MENU_WIDTH) - 8);
   const top = Math.min(clientY + 8, window.innerHeight - menuHeight - 8);
 
   return (
-    <div ref={ref} className="edge-kind-menu" style={{ left, top }}>
-      {EDGE_KIND_ORDER.map((key) => {
+    <div ref={ref} className={`edge-kind-menu${blockedReason ? ' is-blocked' : ''}`} style={{ left, top }}>
+      {blockedReason && (
+        <div className="edge-kind-menu__blocked" role="alert">
+          <strong>This link would skip a step.</strong> {blockedReason} Linking straight across leaves the later card
+          without the evidence that justifies it.
+          <span className="edge-kind-menu__blocked-alt">You can still mark a tension between them:</span>
+        </div>
+      )}
+      {kinds.map((key) => {
         const cfg = EDGE_KINDS[key];
         return (
           <button key={key} type="button" onClick={() => onPick(key)}>

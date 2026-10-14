@@ -206,7 +206,7 @@ export function useSourceActions(board: BoardState, projectId: string) {
           doc,
           content,
           brief: current.brief,
-          boardText: describeBoard(current.nodes, current.edges, current.gapIds),
+          boardText: describeBoard(current.nodes, current.edges, current.traceIssues),
         });
         current.updateSource(doc.id, {
           readAt: Date.now(),

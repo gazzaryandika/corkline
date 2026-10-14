@@ -1,6 +1,77 @@
 # Corkline — Handover
 
-Last updated: 2026-10-06 (Sources: documents → draft cards; branch `feature/document-upload`)
+Last updated: 2026-10-07 (Traceability; branch `feature/ai-connections`)
+
+## Traceability: one step at a time (2026-10-07, Ayan; same branch `feature/ai-connections`)
+
+Skipping a step (Problem → Opportunity, Prototype → Assumption) produces directions backed by little or
+no evidence, so the whole board now follows one rule: **links join neighbouring steps (Problem →
+Assumption → Evidence → Insight → Opportunity → Direction → Prototype) or cards in the same step.** All
+rules live in `app/src/lib/trace.ts` (replaces `lib/gaps.ts` and the old `needsIncoming` flag).
+Details in `app/README.md` → "Traceability".
+
+Decisions (Ayan's answers, 2026-10-07):
+- **Hand-drawn skip links are blocked, with the reason** ("Problem and Insight are 3 steps apart. Trace
+  it one step at a time: …"). Only Contradicts is offered then. `addRelation` refuses them too.
+- **Existing skip links are flagged, never auto-deleted:** dashed line, ⚠ on the label, and a count in
+  the toolbar ("N gaps · M skipped steps") that opens the **Trace check** panel. Per link: show it, ask
+  the AI for the step-by-step route (runs in the chat as a link review), or remove it.
+- **Iteration: prototype results become new Evidence.** A Prototype's full view has "+ Add result as
+  Evidence"; the new Evidence card shows "↺ from Prototype …". A Prototype ↔ Evidence skip link can be
+  converted with "Mark as prototype result" (link removed, Evidence marked).
+- **Three card checks** (amber glow + tag, also in the trace check and given to the AI as TRACE GAP):
+  *needs the previous step* (an Assumption needs a Problem, Evidence an Assumption, … wording per type),
+  *not backed by evidence* (Opportunity/Direction/Prototype whose chain back never reaches Evidence),
+  *not yet validated* (Assumption with no Evidence linked, supporting or contradicting).
+- My defaults (not asked): same-column links are allowed and a card inherits its justification from a
+  same-column card that has it (Prototype v1 → v2); Contradicts may join any two cards but never counts
+  as backing; Evidence from a prototype result counts as traced.
+
+Effect on the existing boards (nothing changed in them): 72 Hours Blackout 3 skipped links, 11 flagged
+cards; Triodos Kids 12 skipped links, 18 flagged cards (mostly Evidence not yet linked to an Assumption).
+The checks are strict on purpose; if the team finds "Evidence needs an Assumption" too strict, it's one
+line in `analyseTrace`.
+
+Tested 2026-10-07 on a temporary project: the rules on a 11-card chain (inheritance, contradicts, skips);
+drawing Problem → Insight showed the explanation with only Contradicts; Problem → Assumption showed all
+four types and cleared that flag; Mark as prototype result; + Add result as Evidence; the trace check
+updated live; "Ask AI for the steps" in Mock and with Gemini 3.5 Flash-Lite (which said which step was
+missing rather than skipping). Build and lint clean.
+
+## AI-suggested links (2026-10-07, Ayan; branch `feature/ai-connections`, built on `feature/grid-layout`)
+
+**Done: feature 3 of the backlog (#3).** Ask the AI Assistant to connect cards ("this evidence supports
+the insight about …", "find connections", or select two cards → "✦ Connect these 2") and it proposes
+links of all four types for review in the chat. Details in `app/README.md` → "AI-suggested links".
+
+Decisions:
+- **Review inline in the chat**, not in a pop-up, so the board stays visible; clicking a suggestion
+  highlights its two cards. Each can be retyped, flipped, accepted or rejected; nothing is drawn until
+  "Add N links".
+- Linking existing cards is structuring the designer's reasoning, within the AI's role; the prompt says
+  to only link what the cards say and to give a reason for each link.
+- **Every line runs left to right** (Ayan). A link pointing at a card further left is drawn from that
+  card with reversed wording: "Problem — Supported by → Evidence", "Assumption — Tested by → Prototype",
+  "Follows from" for Leads to. The data is unchanged, so this applies to all existing links too (on
+  Triodos Kids, 3 links now read "Supported by"). Links can still be drawn by hand as before; the AI
+  is an extra way to find them.
+- **Step-by-step links** (Ayan): the AI links only neighbouring columns (Assumption → Evidence →
+  Insight → …), never shortcuts like Assumption → Prototype, so the designer can trace each step;
+  many-to-one is fine. Enforced in code as well as the prompt. (Hand-drawn links: see Traceability below.)
+- **Click a line to trace its path** (Ayan): highlights everything leading into and following from it.
+  Deleting a line moved to a × on the traced line's label (it used to be "click the label twice").
+
+Tested 2026-10-07: tracing the middle link of a chain lit both Assumptions through to the Prototype and
+dimmed an unrelated pair; "connect the prototype to the play assumption" gave no direct link and
+explained why; Find connections on 9 unlinked cards gave a full Problem → … → Prototype chain with
+many-to-one links and no skipped steps.
+
+Tested 2026-10-07 (Gemini 3.5 Flash-Lite, 9 test cards): a direct request gave exactly the right Supports
+link; "Find connections" filled both gap cards with a sensible chain (Insight → Opportunity → Direction)
+plus an Evidence → Assumption link; "Connect these 2" chose Supports in the right direction; flip,
+retype, Accept all and Add worked and the gap count went to 0. **Limit:** for an ambiguous request ("the
+coins evidence" with two coin cards) Flash-Lite picked one instead of asking; the review shows which card
+it picked, so it's easy to catch, but a stronger model follows the "ask which one" rule more reliably.
 
 ## Grid layout (2026-10-07, Ayan; branch `feature/grid-layout`, built on `feature/summary-notes`)
 

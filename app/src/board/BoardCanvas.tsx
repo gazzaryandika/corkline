@@ -14,6 +14,7 @@ import { CardDetailModal } from './CardDetailModal';
 import { BoardContext, type BoardContextValue } from './BoardContext';
 import type { BoardState, CardNode as CardNodeData, RelationEdgeType } from '../state/useBoardState';
 import type { EdgeKindId } from '../types';
+import { isStepLink, skipExplanation } from '../lib/trace';
 import './board.css';
 
 const nodeTypes: NodeTypes = { card: CardNode, group: GroupFrame, note: NoteNode };
@@ -50,9 +51,12 @@ interface BoardCanvasProps {
   /** The summary note whose cards are highlighted (set by clicking it, or from the chat). */
   highlightedNoteId: string | null;
   onHighlightNote: (id: string | null) => void;
+  /** Cards to light up and show (e.g. the two ends of a link the AI suggests); null: none. */
+  previewCardIds: string[] | null;
+  onClearPreview: () => void;
 }
 
-export function BoardCanvas({ board, highlightedNoteId, onHighlightNote }: BoardCanvasProps) {
+export function BoardCanvas({ board, highlightedNoteId, onHighlightNote, previewCardIds, onClearPreview }: BoardCanvasProps) {
   const { screenToFlowPosition, getInternalNode, fitView } = useReactFlow<CardNodeData, RelationEdgeType>();
 
   const [armedNodeId, setArmedNodeIdState] = useState<string | null>(null);
@@ -61,6 +65,8 @@ export function BoardCanvas({ board, highlightedNoteId, onHighlightNote }: Board
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   const [highlightedCardId, setHighlightedCardId] = useState<string | null>(null);
   const [cardMenu, setCardMenu] = useState<CardMenu | null>(null);
+  /** The link whose path is traced (clicked); see edgeTrace below. */
+  const [highlightedEdgeId, setHighlightedEdgeId] = useState<string | null>(null);
   /** The frame a dragged card would join if dropped now (highlighted). */
   const [dropTargetGroupId, setDropTargetGroupId] = useState<string | null>(null);
 
@@ -159,8 +165,16 @@ export function BoardCanvas({ board, highlightedNoteId, onHighlightNote }: Board
         setHighlightedCardId(null);
         return;
       }
+      if (e.key === 'Escape' && highlightedEdgeId) {
+        setHighlightedEdgeId(null);
+        return;
+      }
       if (e.key === 'Escape' && highlightedNoteId) {
         onHighlightNote(null);
+        return;
+      }
+      if (e.key === 'Escape' && previewCardIds) {
+        onClearPreview();
         return;
       }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'g') {
@@ -175,7 +189,7 @@ export function BoardCanvas({ board, highlightedNoteId, onHighlightNote }: Board
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [board, disarm, highlightedCardId, highlightedNoteId, onHighlightNote]);
+  }, [board, disarm, highlightedCardId, highlightedEdgeId, highlightedNoteId, onHighlightNote, previewCardIds, onClearPreview]);
 
   const handlePick = useCallback(
     (kind: EdgeKindId) => {
@@ -184,6 +198,17 @@ export function BoardCanvas({ board, highlightedNoteId, onHighlightNote }: Board
     },
     [board, pendingConnection],
   );
+
+  // Hand-drawn links follow the same step-by-step rule as everything else (lib/trace.ts):
+  // between cards more than one step apart, explain why and offer only Contradicts.
+  const pendingBlockedReason = useMemo(() => {
+    if (!pendingConnection) return undefined;
+    const typeOf = (id: string) => board.nodes.find((n): n is CardNodeData => n.type === 'card' && n.id === id)?.data.nodeType;
+    const a = typeOf(pendingConnection.source);
+    const b = typeOf(pendingConnection.target);
+    if (!a || !b || isStepLink(a, b, 'leads')) return undefined;
+    return skipExplanation(a, b);
+  }, [pendingConnection, board.nodes]);
 
   const handleNodeContextMenu = useCallback((event: React.MouseEvent, node: { id: string; type?: string }) => {
     event.preventDefault();
@@ -200,13 +225,20 @@ export function BoardCanvas({ board, highlightedNoteId, onHighlightNote }: Board
   );
 
   // A clicked summary note lights up itself, the cards it summarises, the frames they
-  // sit in, and the links between those cards.
+  // sit in, and the links between those cards. A preview (cards picked from the chat)
+  // works the same way, without a note.
   const noteFocus = useMemo(() => {
-    if (!highlightedNoteId) return null;
-    const note = board.nodes.find((n) => n.id === highlightedNoteId && n.type === 'note');
-    if (!note || note.type !== 'note') return null;
-    const cards = new Set(note.data.sourceCardIds);
-    const nodeIds = new Set<string>([note.id]);
+    let cards: Set<string>;
+    const nodeIds = new Set<string>();
+    if (previewCardIds && previewCardIds.length > 0) {
+      cards = new Set(previewCardIds);
+    } else {
+      if (!highlightedNoteId) return null;
+      const note = board.nodes.find((n) => n.id === highlightedNoteId && n.type === 'note');
+      if (!note || note.type !== 'note') return null;
+      cards = new Set(note.data.sourceCardIds);
+      nodeIds.add(note.id);
+    }
     for (const n of board.nodes) {
       if (n.type === 'card' && cards.has(n.id)) {
         nodeIds.add(n.id);
@@ -215,21 +247,87 @@ export function BoardCanvas({ board, highlightedNoteId, onHighlightNote }: Board
     }
     const edgeIds = new Set(board.edges.filter((e) => cards.has(e.source) && cards.has(e.target)).map((e) => e.id));
     return { nodeIds, edgeIds };
-  }, [highlightedNoteId, board.nodes, board.edges]);
+  }, [highlightedNoteId, previewCardIds, board.nodes, board.edges]);
 
-  // Show the note and its cards when it gets highlighted.
+  // A clicked link traces its path: the two cards it joins, everything leading into the
+  // left one and everything following from the right one, all the way along. Links are
+  // followed left to right as drawn (see RelationEdge). Contradicts links mark a tension,
+  // not a step, so they're only included when they're the one clicked.
+  const edgeTrace = useMemo(() => {
+    if (!highlightedEdgeId) return null;
+    const x = (id: string) => getInternalNode(id)?.internals.positionAbsolute.x ?? 0;
+    const flow = board.edges.map((e) =>
+      x(e.target) < x(e.source) ? { id: e.id, from: e.target, to: e.source, kind: e.data?.kind } : { id: e.id, from: e.source, to: e.target, kind: e.data?.kind },
+    );
+    const start = flow.find((f) => f.id === highlightedEdgeId);
+    if (!start) return null;
+    const nodeIds = new Set([start.from, start.to]);
+    const edgeIds = new Set([start.id]);
+    const walk = (first: string, step: (f: (typeof flow)[number]) => [string, string]) => {
+      const queue = [first];
+      while (queue.length > 0) {
+        const card = queue.pop()!;
+        for (const f of flow) {
+          if (f.kind === 'contradicts' || edgeIds.has(f.id)) continue;
+          const [here, next] = step(f);
+          if (here !== card) continue;
+          edgeIds.add(f.id);
+          if (!nodeIds.has(next)) {
+            nodeIds.add(next);
+            queue.push(next);
+          }
+        }
+      }
+    };
+    walk(start.from, (f) => [f.to, f.from]); // everything leading into the left card
+    walk(start.to, (f) => [f.from, f.to]); // everything following from the right card
+    for (const n of board.nodes) if (n.type === 'card' && nodeIds.has(n.id) && n.parentId) nodeIds.add(n.parentId);
+    return { nodeIds, edgeIds };
+  }, [highlightedEdgeId, board.edges, board.nodes, getInternalNode]);
+
+  const traceEdge = useCallback(
+    (edgeId: string) => {
+      setHighlightedCardId(null);
+      onHighlightNote(null);
+      onClearPreview();
+      setHighlightedEdgeId((current) => (current === edgeId ? null : edgeId));
+    },
+    [onHighlightNote, onClearPreview],
+  );
+
+  // Another highlight (a note, cards shown from the chat, "See connected cards") replaces a traced path.
   useEffect(() => {
-    if (!noteFocus) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (highlightedNoteId || previewCardIds || highlightedCardId) setHighlightedEdgeId(null);
+  }, [highlightedNoteId, previewCardIds, highlightedCardId]);
+
+  // Show a traced path.
+  useEffect(() => {
+    if (!edgeTrace) return;
     const id = window.setTimeout(
-      () => fitView({ nodes: [...noteFocus.nodeIds].map((nodeId) => ({ id: nodeId })), padding: 0.25, maxZoom: 1, duration: 450 }),
+      () => fitView({ nodes: [...edgeTrace.nodeIds].map((nodeId) => ({ id: nodeId })), padding: 0.2, maxZoom: 1, duration: 450 }),
       60,
     );
     return () => window.clearTimeout(id);
-    // Only when a different note is highlighted, not on every board change.
+    // Only when a different link is traced, not on every board change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [highlightedNoteId]);
+  }, [highlightedEdgeId]);
+
+  // Show the note (or previewed cards) when highlighted.
+  const previewKey = previewCardIds?.join(',') ?? '';
+  useEffect(() => {
+    if (!noteFocus) return;
+    const id = window.setTimeout(
+      () => fitView({ nodes: [...noteFocus.nodeIds].map((nodeId) => ({ id: nodeId })), padding: 0.3, maxZoom: 1, duration: 450 }),
+      60,
+    );
+    return () => window.clearTimeout(id);
+    // Only when a different note or preview is highlighted, not on every board change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightedNoteId, previewKey]);
 
   const focusNodeIds = useMemo(() => {
+    if (edgeTrace) return edgeTrace.nodeIds;
     if (noteFocus) return noteFocus.nodeIds;
     if (highlightAnchorIds.size === 0) return null;
     const ids = new Set<string>(highlightAnchorIds);
@@ -245,9 +343,10 @@ export function BoardCanvas({ board, highlightedNoteId, onHighlightNote }: Board
       if (highlightAnchorIds.has(e.target)) ids.add(e.source);
     }
     return ids;
-  }, [noteFocus, highlightAnchorIds, board.nodes, board.edges]);
+  }, [edgeTrace, noteFocus, highlightAnchorIds, board.nodes, board.edges]);
 
   const focusEdgeIds = useMemo(() => {
+    if (edgeTrace) return edgeTrace.edgeIds;
     if (noteFocus) return noteFocus.edgeIds;
     if (highlightAnchorIds.size === 0) return null;
     const ids = new Set<string>();
@@ -255,11 +354,24 @@ export function BoardCanvas({ board, highlightedNoteId, onHighlightNote }: Board
       if (highlightAnchorIds.has(e.source) || highlightAnchorIds.has(e.target)) ids.add(e.id);
     }
     return ids;
-  }, [noteFocus, highlightAnchorIds, board.edges]);
+  }, [edgeTrace, noteFocus, highlightAnchorIds, board.edges]);
+
+  const prototypeTitles = useMemo(
+    () =>
+      new Map(
+        board.nodes
+          .filter((n): n is CardNodeData => n.type === 'card' && n.data.nodeType === 'prototype')
+          .map((n) => [n.id, n.data.title.trim() || 'untitled']),
+      ),
+    [board.nodes],
+  );
 
   const contextValue = useMemo<BoardContextValue>(
     () => ({
-      gapIds: board.gapIds,
+      traceIssues: board.traceIssues,
+      skipLinkIds: board.skipLinkIds,
+      prototypeTitles,
+      addEvidenceFromPrototype: board.addEvidenceFromPrototype,
       laneById: board.laneById,
       updateCard: board.updateCard,
       deleteNode: board.deleteNode,
@@ -274,12 +386,19 @@ export function BoardCanvas({ board, highlightedNoteId, onHighlightNote }: Board
       dropTargetGroupId,
       updateNoteTitle: board.updateNoteTitle,
       highlightedNoteId,
+      onEdgeClick: traceEdge,
+      highlightedEdgeId,
     }),
     [
+      traceEdge,
+      highlightedEdgeId,
       dropTargetGroupId,
       board.updateNoteTitle,
       highlightedNoteId,
-      board.gapIds,
+      board.traceIssues,
+      board.skipLinkIds,
+      prototypeTitles,
+      board.addEvidenceFromPrototype,
       board.laneById,
       board.updateCard,
       board.deleteNode,
@@ -323,7 +442,9 @@ export function BoardCanvas({ board, highlightedNoteId, onHighlightNote }: Board
           onPaneClick={() => {
             if (armedRef.current) disarm();
             setHighlightedCardId(null);
+            setHighlightedEdgeId(null);
             onHighlightNote(null);
+            onClearPreview();
           }}
           onNodeClick={(_, node) => {
             // Clicking a summary note toggles highlighting its cards.
@@ -361,6 +482,7 @@ export function BoardCanvas({ board, highlightedNoteId, onHighlightNote }: Board
           <EdgeKindMenu
             clientX={pendingConnection.clientX}
             clientY={pendingConnection.clientY}
+            blockedReason={pendingBlockedReason}
             onPick={handlePick}
             onClose={() => setPendingConnection(null)}
           />

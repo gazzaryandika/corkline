@@ -13,16 +13,13 @@ export function Legend() {
       </button>
       {!collapsed && (
         <div className="legend__body">
-          <h4>Node types</h4>
+          <h4>Steps, left to right</h4>
           {NODE_TYPE_ORDER.map((key) => {
             const cfg = NODE_TYPES[key];
             return (
               <div className="legend__row" key={key}>
                 <span className="legend__dot" style={{ background: cfg.color }} />
-                <span>
-                  {cfg.label}
-                  {cfg.needsIncoming && <span className="legend__hint"> (needs a link in)</span>}
-                </span>
+                <span>{cfg.label}</span>
               </div>
             );
           })}
@@ -36,13 +33,23 @@ export function Legend() {
               </div>
             );
           })}
+          <p className="legend__note">
+            Lines read left to right. A link pointing back to an earlier column reads the other way round:
+            Supported by, Tested by, Follows from.
+          </p>
           <div className="legend__row legend__row--gap">
             <span className="legend__dot" style={{ background: GAP_COLOR }} />
-            <span>Amber glow = nothing feeds into this card yet</span>
+            <span>Amber glow = a step is missing in this card&rsquo;s trace (its tag says what)</span>
           </div>
           <p className="legend__note">
+            Links go one step at a time: Problem → Assumption → Evidence → Insight → Opportunity → Direction →
+            Prototype, or between cards in the same column. Only Contradicts may join any two cards. Results from
+            testing a prototype come back as new Evidence (open the Prototype: &ldquo;+ Add result as Evidence&rdquo;).
+          </p>
+          <p className="legend__note">
             Click the dot on a card&rsquo;s edge, then click another card to link them — or drag the dot straight onto
-            a target. Esc cancels. Click a line&rsquo;s label twice to delete it.
+            a target. Esc cancels. Click a line to highlight its whole path (everything leading into it and following
+            from it); the &times; on its label then deletes it.
           </p>
           <p className="legend__note">
             ⌘/Ctrl-click cards to select several at once (drag one to move them together), or hold Shift and drag on

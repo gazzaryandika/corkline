@@ -15,12 +15,14 @@ export interface NodeTypeConfig {
   short: string;
   color: string;
   placeholder: string;
-  needsIncoming: boolean;
 }
 
 export interface EdgeKindConfig {
   id: EdgeKindId;
   label: string;
+  /** The same link read the other way round, for drawing it left to right when it points
+   * at a card further left (e.g. "Supported by"). Same as `label` for symmetric links. */
+  reverseLabel: string;
   color: string;
   arrow: boolean;
 }
@@ -35,6 +37,8 @@ export interface CardData {
   image?: string;
   /** Set when the card was drafted from a source document and approved by the designer. */
   source?: CardSource;
+  /** Evidence only: the Prototype whose test produced this result (an iteration loop). */
+  fromPrototypeId?: string;
   [key: string]: unknown;
 }
 

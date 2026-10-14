@@ -103,6 +103,10 @@
   background: var(--surface);
   white-space: nowrap;
   transition: color 0.2s, border-color 0.2s, background 0.2s;
+  cursor: pointer;
+}
+.gap-pill:hover {
+  border-color: var(--text-dim);
 }
 .gap-pill.has-gaps {
   color: var(--gap-text);
