@@ -1,6 +1,6 @@
-import { EDGE_KINDS, NODE_TYPES } from '../config';
+import { EDGE_KINDS, NODE_TYPES, SOURCE_KINDS } from '../config';
 import type { AnyNode, CardNode, RelationEdgeType } from '../state/useBoardState';
-import type { ProjectBrief } from '../types';
+import type { ProjectBrief, SourceDoc } from '../types';
 
 const MAX_CONTEXT_CHARS = 40_000;
 
@@ -36,6 +36,10 @@ export function describeBoard(nodes: AnyNode[], edges: RelationEdgeType[], gapId
       c.selected ? 'SELECTED' : null,
       gapIds.has(c.id) ? 'GAP: needs evidence but nothing links into it' : null,
       c.parentId && groupLabels.has(c.parentId) ? `in group "${groupLabels.get(c.parentId)}"` : null,
+      c.data.source ? `from document "${c.data.source.docName}"` : null,
+      c.data.source?.aiType && c.data.source.aiType !== c.data.nodeType
+        ? `AI suggested ${NODE_TYPES[c.data.source.aiType].label}; the designer changed the type`
+        : null,
     ].filter(Boolean);
     const body = c.data.body.trim();
     return [
@@ -76,4 +80,18 @@ export function describeBrief(brief: ProjectBrief): string {
     ([key, label]) => `${label}: ${brief[key].trim().replace(/\n/g, '\n  ')}`,
   );
   return lines.length ? lines.join('\n') : 'No project brief has been filled in yet.';
+}
+
+/** Lists the project's source documents, oldest first, so the model can see how the project's material grew. */
+export function describeSources(sources: SourceDoc[]): string {
+  if (sources.length === 0) return 'No documents have been added yet.';
+  return [...sources]
+    .sort((a, b) => a.addedAt - b.addedAt)
+    .map((s) => {
+      const date = new Date(s.addedAt).toISOString().slice(0, 10);
+      const read = s.readAt ? `${s.acceptedCount ?? 0} cards accepted from it` : 'not read yet';
+      const summary = s.summary ? `\n    ${s.summary}` : '';
+      return `- "${s.name}" (${SOURCE_KINDS[s.kind].label}, added ${date}; ${read})${summary}`;
+    })
+    .join('\n');
 }

@@ -13,9 +13,12 @@ interface ToolbarProps {
   board: BoardState;
   /** Open the Project panel on first render (used right after creating a project). */
   initialBriefOpen?: boolean;
+  onOpenSources: () => void;
+  /** How many documents the AI is reading right now. */
+  readingCount: number;
 }
 
-export function Toolbar({ board, initialBriefOpen = false }: ToolbarProps) {
+export function Toolbar({ board, initialBriefOpen = false, onOpenSources, readingCount }: ToolbarProps) {
   const { screenToFlowPosition, zoomIn, zoomOut, fitView } = useReactFlow<CardNode, RelationEdgeType>();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [briefOpen, setBriefOpen] = useState(initialBriefOpen);
@@ -59,6 +62,7 @@ export function Toolbar({ board, initialBriefOpen = false }: ToolbarProps) {
   const canGroup = selectedCardIds.length >= 2;
 
   const gapCount = board.gapIds.size;
+  const toReview = board.sources.reduce((n, s) => n + (s.proposals?.length ?? 0), 0);
 
   return (
     <div className="toolbar">
@@ -76,6 +80,19 @@ export function Toolbar({ board, initialBriefOpen = false }: ToolbarProps) {
         onClick={() => setBriefOpen(true)}
       >
         ✎ Project
+      </button>
+      <button
+        type="button"
+        className="group-btn toolbar__sources"
+        title="Documents behind this project: add them and let the AI draft cards for you to review"
+        onClick={onOpenSources}
+      >
+        ▤ Sources{board.sources.length > 0 && <span className="toolbar__count">{board.sources.length}</span>}
+        {readingCount > 0 ? (
+          <span className="toolbar__badge">reading…</span>
+        ) : (
+          toReview > 0 && <span className="toolbar__badge">{toReview} to review</span>
+        )}
       </button>
       <div className="toolbar__add-group">
         {NODE_TYPE_ORDER.map((key) => {

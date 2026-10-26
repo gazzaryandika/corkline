@@ -4,7 +4,7 @@ import type { CardData } from '../types';
 export interface BoardContextValue {
   gapIds: Set<string>;
   laneById: Map<string, { index: number; count: number }>;
-  updateCard: (id: string, patch: Partial<Pick<CardData, 'title' | 'body' | 'link' | 'image'>>) => void;
+  updateCard: (id: string, patch: Partial<Pick<CardData, 'nodeType' | 'title' | 'body' | 'link' | 'image'>>) => void;
   deleteNode: (id: string) => void;
   deleteEdge: (id: string) => void;
   armedNodeId: string | null;
@@ -18,6 +18,12 @@ export interface BoardContextValue {
   focusNodeIds: Set<string> | null;
   /** Edge ids that touch the current selection — these glow instead of dimming. */
   focusEdgeIds: Set<string> | null;
+  /** The frame a card being dragged would join if dropped now. */
+  dropTargetGroupId: string | null;
+  updateNoteTitle: (id: string, title: string) => void;
+  updateNoteBody: (id: string, body: string) => void;
+  /** The summary note whose cards are highlighted right now. */
+  highlightedNoteId: string | null;
 }
 
 export const BoardContext = createContext<BoardContextValue | null>(null);

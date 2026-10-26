@@ -1,0 +1,155 @@
+/* A sticky note, deliberately unlike a card: yellow paper, slight tilt, no type
+   bar, no connector. */
+.note-node {
+  --note-paper: #fef3a3;
+  --note-edge: #e9d76a;
+  --note-ink: #4a3f0b;
+
+  width: 280px;
+  padding: 12px 14px 10px;
+  background: linear-gradient(180deg, #fff6b8 0%, var(--note-paper) 100%);
+  border: 1px solid var(--note-edge);
+  border-radius: 3px 3px 14px 3px;
+  box-shadow:
+    0 1px 2px rgba(74, 63, 11, 0.12),
+    0 8px 18px -6px rgba(74, 63, 11, 0.28);
+  color: var(--note-ink);
+  font-family: var(--font-sans);
+  transform: rotate(-0.8deg);
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, transform 0.15s ease, opacity 0.18s ease, filter 0.18s ease;
+}
+.note-node:hover {
+  transform: rotate(-0.8deg) translateY(-1px);
+}
+.note-node.is-dragging {
+  cursor: grabbing;
+  box-shadow: 0 16px 30px -8px rgba(74, 63, 11, 0.35);
+}
+.note-node.is-active,
+.note-node.is-selected {
+  box-shadow:
+    0 0 0 3px #d4a20b,
+    0 10px 24px -6px rgba(74, 63, 11, 0.35);
+}
+.note-node.is-focus-dim {
+  opacity: 0.35;
+  filter: saturate(0.6);
+}
+
+.note-node__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.note-node__kind {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8a6d00;
+}
+.note-node__delete {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: #8a6d00;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.6;
+}
+.note-node:hover .note-node__delete,
+.note-node__delete:focus-visible,
+.note-node__delete.is-confirming {
+  opacity: 1;
+}
+.note-node__delete:hover {
+  background: rgba(138, 109, 0, 0.12);
+}
+.note-node__delete.is-confirming {
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  background: #b45309;
+}
+
+.note-node__title {
+  width: 100%;
+  margin: 0 0 2px -3px;
+  padding: 1px 3px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--note-ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+  outline: none;
+  cursor: text;
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  display: block;
+}
+.note-node__title:hover {
+  border-color: var(--note-edge);
+}
+.note-node__title:focus {
+  border-color: #d4a20b;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.note-node__meta {
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: #8a6d00;
+}
+
+.note-node__body {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 1px 3px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--note-ink);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  cursor: text;
+}
+.note-node__body:hover {
+  border-color: var(--note-edge);
+}
+.note-node__body:focus {
+  border-color: #d4a20b;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.note-node__foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--note-edge);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: #a08419;
+}

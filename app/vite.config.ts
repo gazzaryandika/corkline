@@ -1,6 +1,7 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig, loadEnv } from 'vite'
 import { aiProxy } from './server/aiProxy.ts'
+import { linkFetcher } from './server/linkFetcher.ts'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -15,6 +16,7 @@ export default defineConfig(({ mode }) => {
         apiKey: env.GEMINI_API_KEY || undefined,
         model: env.GEMINI_MODEL || 'gemini-2.5-flash',
       }),
+      linkFetcher(),
     ],
   }
 })

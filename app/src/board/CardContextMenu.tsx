@@ -6,6 +6,9 @@ interface CardContextMenuProps {
   isHighlighted: boolean;
   onSeeConnections: () => void;
   onClearHighlight: () => void;
+  /** Set when the card is inside a group frame (e.g. an AI theme): its label, shown in the menu. */
+  groupLabel?: string;
+  onRemoveFromGroup?: () => void;
   onClose: () => void;
 }
 
@@ -18,6 +21,8 @@ export function CardContextMenu({
   isHighlighted,
   onSeeConnections,
   onClearHighlight,
+  groupLabel,
+  onRemoveFromGroup,
   onClose,
 }: CardContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
@@ -41,7 +46,8 @@ export function CardContextMenu({
     };
   }, [onClose]);
 
-  const menuHeight = (isHighlighted ? 2 : 1) * ROW_HEIGHT + 14;
+  const rows = 1 + (isHighlighted ? 1 : 0) + (onRemoveFromGroup ? 1 : 0);
+  const menuHeight = rows * ROW_HEIGHT + 14;
   const left = Math.min(clientX + 8, window.innerWidth - MENU_WIDTH - 8);
   const top = Math.min(clientY + 8, window.innerHeight - menuHeight - 8);
 
@@ -53,6 +59,11 @@ export function CardContextMenu({
       {isHighlighted && (
         <button type="button" onClick={onClearHighlight}>
           Clear highlight
+        </button>
+      )}
+      {onRemoveFromGroup && (
+        <button type="button" onClick={onRemoveFromGroup} title={groupLabel ? `Take this card out of "${groupLabel}"` : undefined}>
+          Remove from {groupLabel ? `“${groupLabel.length > 16 ? `${groupLabel.slice(0, 15)}…` : groupLabel}”` : 'group'}
         </button>
       )}
     </div>

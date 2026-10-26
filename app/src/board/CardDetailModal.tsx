@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { NODE_TYPES } from '../config';
 import { useBoardContext } from './BoardContext';
 import { readAndResizeImage } from '../lib/image';
+import { CardTypeSelect } from './CardTypeSelect';
 import type { CardNode } from '../state/useBoardState';
 import './CardDetailModal.css';
 
@@ -88,7 +89,10 @@ export function CardDetailModal({ node, onClose }: CardDetailModalProps) {
         style={{ ['--type-color' as string]: cfg.color } as React.CSSProperties}
       >
         <div className="card-modal__header">
-          <span className="card-modal__badge">{cfg.short}</span>
+          <span className="card-modal__badge-wrap">
+            <span className="card-modal__badge">{cfg.label} ▾</span>
+            <CardTypeSelect value={node.data.nodeType} onChange={(nodeType) => updateCard(node.id, { nodeType })} />
+          </span>
           <button type="button" className="card-modal__close" onClick={onClose} title="Close">
             ×
           </button>
@@ -111,6 +115,21 @@ export function CardDetailModal({ node, onClose }: CardDetailModalProps) {
             value={node.data.body}
             onChange={(e) => updateCard(node.id, { body: e.target.value })}
           />
+
+          {node.data.source && (
+            <>
+              <span className="card-modal__field-label">Source</span>
+              <div className="card-modal__source">
+                <span className="card-modal__source-name">▤ {node.data.source.docName}</span>
+                <blockquote>“{node.data.source.quote}”</blockquote>
+                {node.data.source.aiType && node.data.source.aiType !== node.data.nodeType && (
+                  <span className="card-modal__source-ai-type">
+                    AI suggested: {NODE_TYPES[node.data.source.aiType].label} · changed by the designer
+                  </span>
+                )}
+              </div>
+            </>
+          )}
 
           <span className="card-modal__field-label">Image</span>
           {node.data.image ? (

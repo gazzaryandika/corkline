@@ -3,6 +3,7 @@ import { Background, BackgroundVariant, ReactFlow, useReactFlow, type NodeTypes,
 import '@xyflow/react/dist/style.css';
 import { CardNode } from './CardNode';
 import { GroupFrame } from './GroupFrame';
+import { NoteNode } from './NoteNode';
 import { RelationEdge } from './RelationEdge';
 import { EdgeMarkers } from './EdgeMarkers';
 import { EdgeKindMenu } from './EdgeKindMenu';
@@ -14,7 +15,7 @@ import type { BoardState, CardNode as CardNodeData, RelationEdgeType } from '../
 import type { EdgeKindId } from '../types';
 import './board.css';
 
-const nodeTypes: NodeTypes = { card: CardNode, group: GroupFrame };
+const nodeTypes: NodeTypes = { card: CardNode, group: GroupFrame, note: NoteNode };
 const edgeTypes: EdgeTypes = { relation: RelationEdge };
 const SNAP_GRID: [number, number] = [26, 26];
 
@@ -45,10 +46,13 @@ function findNodeIdAtPoint(clientX: number, clientY: number, excludeId: string):
 
 interface BoardCanvasProps {
   board: BoardState;
+  /** The summary note whose cards are highlighted (set by clicking it, or from the chat). */
+  highlightedNoteId: string | null;
+  onHighlightNote: (id: string | null) => void;
 }
 
-export function BoardCanvas({ board }: BoardCanvasProps) {
-  const { screenToFlowPosition, getInternalNode } = useReactFlow<CardNodeData, RelationEdgeType>();
+export function BoardCanvas({ board, highlightedNoteId, onHighlightNote }: BoardCanvasProps) {
+  const { screenToFlowPosition, getInternalNode, fitView } = useReactFlow<CardNodeData, RelationEdgeType>();
 
   const [armedNodeId, setArmedNodeIdState] = useState<string | null>(null);
   const [tempEnd, setTempEnd] = useState<{ x: number; y: number } | null>(null);
@@ -56,6 +60,40 @@ export function BoardCanvas({ board }: BoardCanvasProps) {
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   const [highlightedCardId, setHighlightedCardId] = useState<string | null>(null);
   const [cardMenu, setCardMenu] = useState<CardMenu | null>(null);
+  /** The frame a dragged card would join if dropped now (highlighted). */
+  const [dropTargetGroupId, setDropTargetGroupId] = useState<string | null>(null);
+
+  /** The frame a dragged card is over (other than the one it's already in): where the
+   * mouse pointer is, or failing that where the card's centre is. The smallest wins if
+   * frames overlap. */
+  const groupUnderCard = useCallback(
+    (cardId: string, event: MouseEvent | React.MouseEvent | TouchEvent): string | null => {
+      const card = getInternalNode(cardId);
+      if (!card || card.type !== 'card') return null;
+      const centre = {
+        x: card.internals.positionAbsolute.x + (card.measured.width ?? 240) / 2,
+        y: card.internals.positionAbsolute.y + (card.measured.height ?? 96) / 2,
+      };
+      const touch = 'changedTouches' in event ? event.changedTouches[0] : null;
+      const client = touch ?? ('clientX' in event ? event : null);
+      const points = client ? [screenToFlowPosition({ x: client.clientX, y: client.clientY }), centre] : [centre];
+
+      for (const p of points) {
+        let best: { id: string; area: number } | null = null;
+        for (const n of board.nodes) {
+          if (n.type !== 'group' || n.id === card.parentId) continue;
+          const w = n.width ?? 0;
+          const h = n.height ?? 0;
+          if (p.x >= n.position.x && p.x <= n.position.x + w && p.y >= n.position.y && p.y <= n.position.y + h) {
+            if (!best || w * h < best.area) best = { id: n.id, area: w * h };
+          }
+        }
+        if (best) return best.id;
+      }
+      return null;
+    },
+    [board.nodes, getInternalNode, screenToFlowPosition],
+  );
 
   const armedRef = useRef<string | null>(null);
   const setArmedNodeId = useCallback((id: string | null) => {
@@ -120,6 +158,10 @@ export function BoardCanvas({ board }: BoardCanvasProps) {
         setHighlightedCardId(null);
         return;
       }
+      if (e.key === 'Escape' && highlightedNoteId) {
+        onHighlightNote(null);
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'g') {
         const target = e.target as HTMLElement | null;
         if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
@@ -132,7 +174,7 @@ export function BoardCanvas({ board }: BoardCanvasProps) {
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [board, disarm, highlightedCardId]);
+  }, [board, disarm, highlightedCardId, highlightedNoteId, onHighlightNote]);
 
   const handlePick = useCallback(
     (kind: EdgeKindId) => {
@@ -156,7 +198,38 @@ export function BoardCanvas({ board }: BoardCanvasProps) {
     [highlightedCardId],
   );
 
+  // A clicked summary note lights up itself, the cards it summarises, the frames they
+  // sit in, and the links between those cards.
+  const noteFocus = useMemo(() => {
+    if (!highlightedNoteId) return null;
+    const note = board.nodes.find((n) => n.id === highlightedNoteId && n.type === 'note');
+    if (!note || note.type !== 'note') return null;
+    const cards = new Set(note.data.sourceCardIds);
+    const nodeIds = new Set<string>([note.id]);
+    for (const n of board.nodes) {
+      if (n.type === 'card' && cards.has(n.id)) {
+        nodeIds.add(n.id);
+        if (n.parentId) nodeIds.add(n.parentId);
+      }
+    }
+    const edgeIds = new Set(board.edges.filter((e) => cards.has(e.source) && cards.has(e.target)).map((e) => e.id));
+    return { nodeIds, edgeIds };
+  }, [highlightedNoteId, board.nodes, board.edges]);
+
+  // Show the note and its cards when it gets highlighted.
+  useEffect(() => {
+    if (!noteFocus) return;
+    const id = window.setTimeout(
+      () => fitView({ nodes: [...noteFocus.nodeIds].map((nodeId) => ({ id: nodeId })), padding: 0.25, maxZoom: 1, duration: 450 }),
+      60,
+    );
+    return () => window.clearTimeout(id);
+    // Only when a different note is highlighted, not on every board change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightedNoteId]);
+
   const focusNodeIds = useMemo(() => {
+    if (noteFocus) return noteFocus.nodeIds;
     if (highlightAnchorIds.size === 0) return null;
     const ids = new Set<string>(highlightAnchorIds);
     for (const n of board.nodes) {
@@ -171,16 +244,17 @@ export function BoardCanvas({ board }: BoardCanvasProps) {
       if (highlightAnchorIds.has(e.target)) ids.add(e.source);
     }
     return ids;
-  }, [highlightAnchorIds, board.nodes, board.edges]);
+  }, [noteFocus, highlightAnchorIds, board.nodes, board.edges]);
 
   const focusEdgeIds = useMemo(() => {
+    if (noteFocus) return noteFocus.edgeIds;
     if (highlightAnchorIds.size === 0) return null;
     const ids = new Set<string>();
     for (const e of board.edges) {
       if (highlightAnchorIds.has(e.source) || highlightAnchorIds.has(e.target)) ids.add(e.id);
     }
     return ids;
-  }, [highlightAnchorIds, board.edges]);
+  }, [noteFocus, highlightAnchorIds, board.edges]);
 
   const contextValue = useMemo<BoardContextValue>(
     () => ({
@@ -196,8 +270,16 @@ export function BoardCanvas({ board }: BoardCanvasProps) {
       ungroupNode: board.ungroupNode,
       focusNodeIds,
       focusEdgeIds,
+      dropTargetGroupId,
+      updateNoteTitle: board.updateNoteTitle,
+      updateNoteBody: board.updateNoteBody,
+      highlightedNoteId,
     }),
     [
+      dropTargetGroupId,
+      board.updateNoteTitle,
+      board.updateNoteBody,
+      highlightedNoteId,
       board.gapIds,
       board.laneById,
       board.updateCard,
@@ -215,6 +297,10 @@ export function BoardCanvas({ board }: BoardCanvasProps) {
   const expandedNode = expandedCardId
     ? board.nodes.find((n): n is CardNodeData => n.type === 'card' && n.id === expandedCardId)
     : undefined;
+
+  // The frame (e.g. an AI theme) the right-clicked card sits in, for "Remove from …".
+  const menuCard = cardMenu ? board.nodes.find((n) => n.id === cardMenu.cardId) : undefined;
+  const menuGroup = menuCard?.parentId ? board.nodes.find((n) => n.id === menuCard.parentId) : undefined;
 
   const armedNode = armedNodeId ? getInternalNode(armedNodeId) : undefined;
   const armedStart =
@@ -238,8 +324,26 @@ export function BoardCanvas({ board }: BoardCanvasProps) {
           onPaneClick={() => {
             if (armedRef.current) disarm();
             setHighlightedCardId(null);
+            onHighlightNote(null);
+          }}
+          onNodeClick={(_, node) => {
+            // Clicking a summary note toggles highlighting its cards.
+            if (node.type !== 'note') return;
+            setHighlightedCardId(null);
+            onHighlightNote(highlightedNoteId === node.id ? null : node.id);
           }}
           onNodeContextMenu={handleNodeContextMenu}
+          onNodeDrag={(event, node) => {
+            const target = node.type === 'card' ? groupUnderCard(node.id, event) : null;
+            setDropTargetGroupId((prev) => (prev === target ? prev : target));
+          }}
+          onNodeDragStop={(event, node, nodes) => {
+            setDropTargetGroupId(null);
+            if (node.type !== 'card') return;
+            const target = groupUnderCard(node.id, event);
+            // Dropped onto a frame: the dragged card(s) join it.
+            if (target) board.moveCardsIntoGroup(nodes.filter((n) => n.type === 'card').map((n) => n.id), target);
+          }}
           minZoom={0.35}
           maxZoom={2.4}
           defaultEdgeOptions={{ type: 'relation' }}
@@ -267,6 +371,7 @@ export function BoardCanvas({ board }: BoardCanvasProps) {
             clientY={cardMenu.clientY}
             isHighlighted={highlightedCardId === cardMenu.cardId}
             onSeeConnections={() => {
+              onHighlightNote(null);
               setHighlightedCardId(cardMenu.cardId);
               setCardMenu(null);
             }}
@@ -274,6 +379,15 @@ export function BoardCanvas({ board }: BoardCanvasProps) {
               setHighlightedCardId(null);
               setCardMenu(null);
             }}
+            groupLabel={menuGroup ? String(menuGroup.data.label || '') : undefined}
+            onRemoveFromGroup={
+              menuGroup
+                ? () => {
+                    board.removeFromGroup(cardMenu.cardId);
+                    setCardMenu(null);
+                  }
+                : undefined
+            }
             onClose={() => setCardMenu(null)}
           />
         )}

@@ -8,16 +8,31 @@
  * - 'gemini': real model call via the proxy.
  */
 
+import { getAiModel, markModelUnavailable } from './mode';
+
 export type AiMode = 'mock' | 'gemini';
+
+/** A file for the model: inline base64 (no data: prefix), or a public YouTube link Gemini watches itself. */
+export type AiFile = { mimeType: string; data: string } | { fileUri: string };
 
 export interface AiTurn {
   role: 'user' | 'assistant';
   text: string;
+  /** Files the model should read along with the text (PDF, image, audio). */
+  files?: AiFile[];
 }
 
 export interface AiRequest {
   system?: string;
   messages: AiTurn[];
+  /** Ask for JSON matching this schema (Gemini Schema format) instead of free text. */
+  responseSchema?: Record<string, unknown>;
+}
+
+/** Chat models this API key can use, newest first, plus the one set in .env.local. */
+export interface AiModelList {
+  default: string;
+  models: string[];
 }
 
 export interface AiReply {
@@ -54,17 +69,41 @@ export async function askAi(mode: AiMode, request: AiRequest): Promise<AiReply> 
     response = await fetch('/api/ai/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
+      // The model picked in the app, if any; otherwise the server uses GEMINI_MODEL.
+      body: JSON.stringify({ ...request, model: getAiModel() ?? undefined }),
     });
   } catch {
     throw new AiError('Could not reach the Corkline dev server. Is `npm run dev` still running?');
   }
 
-  const data = (await response.json().catch(() => null)) as Partial<AiReply> & { error?: string } | null;
+  const data = (await response.json().catch(() => null)) as
+    | (Partial<AiReply> & { error?: string; unavailableModel?: string })
+    | null;
+  if (data?.unavailableModel) {
+    // Grey it out in the model list and go back to the default, so Retry just works.
+    markModelUnavailable(data.unavailableModel);
+    throw new AiError(`${data.error} Switched back to the default model; press Retry.`);
+  }
   if (!response.ok || !data || typeof data.text !== 'string') {
     throw new AiError(data?.error ?? `AI request failed (HTTP ${response.status}).`);
   }
   return { text: data.text, model: data.model ?? 'unknown' };
+}
+
+let modelListPromise: Promise<AiModelList | null> | null = null;
+
+/** Fetched once per page load (the server caches Google's answer too). */
+export function fetchAiModels(): Promise<AiModelList | null> {
+  if (!modelListPromise) {
+    modelListPromise = fetch('/api/ai/models')
+      .then((r) => (r.ok ? (r.json() as Promise<AiModelList>) : null))
+      .catch(() => null)
+      .then((list) => {
+        if (!list) modelListPromise = null; // try again next time
+        return list;
+      });
+  }
+  return modelListPromise;
 }
 
 export async function fetchAiStatus(): Promise<AiStatus | null> {

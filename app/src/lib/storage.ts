@@ -1,5 +1,32 @@
-import { NODE_TYPES, EDGE_KINDS } from '../config';
+import { NODE_TYPES, EDGE_KINDS, SOURCE_KINDS } from '../config';
+import { copyProjectFiles, deleteProjectFiles } from './fileStore';
 import type { BoardDocument } from '../types';
+
+function isValidSource(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const s = value as Record<string, unknown>;
+  return (
+    typeof s.id === 'string' &&
+    typeof s.name === 'string' &&
+    typeof s.kind === 'string' &&
+    s.kind in SOURCE_KINDS &&
+    typeof s.mimeType === 'string' &&
+    typeof s.size === 'number' &&
+    typeof s.addedAt === 'number' &&
+    (s.proposals === undefined || Array.isArray(s.proposals))
+  );
+}
+
+function isValidCardSource(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const s = value as Record<string, unknown>;
+  return (
+    typeof s.docId === 'string' &&
+    typeof s.docName === 'string' &&
+    typeof s.quote === 'string' &&
+    (s.aiType === undefined || (typeof s.aiType === 'string' && s.aiType in NODE_TYPES))
+  );
+}
 
 // The single-board key used before projects existed (bumped from v1 earlier so a
 // cached placeholder board wasn't reused). Now only read once, for migration.
@@ -14,6 +41,7 @@ function isValidBoardDocument(value: unknown): value is BoardDocument {
     if (!doc.brief || typeof doc.brief !== 'object') return false;
     if (!Object.values(doc.brief).every((v) => typeof v === 'string')) return false;
   }
+  if (doc.sources !== undefined && (!Array.isArray(doc.sources) || !doc.sources.every(isValidSource))) return false;
 
   for (const node of doc.nodes) {
     if (!node || typeof node !== 'object') return false;
@@ -28,11 +56,28 @@ function isValidBoardDocument(value: unknown): value is BoardDocument {
       continue;
     }
 
+    if (n.type === 'note') {
+      const data = n.data as Record<string, unknown> | undefined;
+      if (
+        !data ||
+        typeof data.title !== 'string' ||
+        typeof data.body !== 'string' ||
+        typeof data.createdAt !== 'number' ||
+        !Array.isArray(data.sourceCardIds) ||
+        !data.sourceCardIds.every((id) => typeof id === 'string') ||
+        (data.scope !== 'selection' && data.scope !== 'board')
+      ) {
+        return false;
+      }
+      continue;
+    }
+
     if (n.parentId !== undefined && typeof n.parentId !== 'string') return false;
     const data = n.data as Record<string, unknown> | undefined;
     if (!data || typeof data.nodeType !== 'string' || !(data.nodeType in NODE_TYPES)) return false;
     if (data.link !== undefined && typeof data.link !== 'string') return false;
     if (data.image !== undefined && typeof data.image !== 'string') return false;
+    if (data.source !== undefined && !isValidCardSource(data.source)) return false;
   }
   for (const edge of doc.edges) {
     if (!edge || typeof edge !== 'object') return false;
@@ -143,6 +188,21 @@ export function deleteProject(id: string): void {
   } catch {
     // The index no longer lists it, which is what the user sees.
   }
+  deleteProjectFiles(id).catch((err) => console.warn('Corkline: could not delete the project’s files.', err));
+}
+
+/** Copies a project's board and its source files into a new project. */
+export function duplicateProject(
+  id: string,
+  rename: (doc: BoardDocument) => BoardDocument,
+): { ok: true; id: string } | { ok: false; reason: string } {
+  const doc = loadBoard(id);
+  if (!doc) return { ok: false, reason: 'The project could not be read.' };
+  const result = createProject(rename(doc));
+  if (result.ok) {
+    copyProjectFiles(id, result.id).catch((err) => console.warn('Corkline: could not copy the project’s files.', err));
+  }
+  return result;
 }
 
 export function projectExists(id: string): boolean {

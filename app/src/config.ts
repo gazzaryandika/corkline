@@ -1,4 +1,4 @@
-import type { EdgeKindConfig, EdgeKindId, NodeTypeConfig, NodeTypeId } from './types';
+import type { EdgeKindConfig, EdgeKindId, NodeTypeConfig, NodeTypeId, SourceKindId } from './types';
 
 // Distinct from every node-type color on purpose — a gap flag must never look
 // like it could be an Opportunity node (the original had both use #e08a1e).
@@ -83,3 +83,15 @@ export const EDGE_KINDS: Record<EdgeKindId, EdgeKindConfig> = {
 };
 
 export const CARD_WIDTH = 240;
+
+/** What kind of document a source is. The kind tells the AI which card types to look for. */
+export const SOURCE_KIND_ORDER: SourceKindId[] = ['context', 'interview', 'observation', 'research', 'workshop', 'other'];
+
+export const SOURCE_KINDS: Record<SourceKindId, { label: string; hint: string }> = {
+  context: { label: 'Project context / brief', hint: 'Looks for problem statements and assumptions' },
+  interview: { label: 'Interview transcript', hint: 'Looks for evidence: what people said and did' },
+  observation: { label: 'Observation / field notes', hint: 'Looks for evidence: what was seen' },
+  research: { label: 'Desk research / report', hint: 'Looks for evidence and assumptions' },
+  workshop: { label: 'Workshop / sticky notes', hint: 'Types each written point as it was meant' },
+  other: { label: 'Other', hint: 'Any card type, only what the document states' },
+};

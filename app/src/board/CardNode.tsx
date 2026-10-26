@@ -3,16 +3,12 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { NODE_TYPES } from '../config';
 import { useBoardContext } from './BoardContext';
 import { readAndResizeImage } from '../lib/image';
+import { useAutosize } from '../lib/autosize';
+import { CardTypeSelect } from './CardTypeSelect';
 import type { CardNode as CardNodeType } from '../state/useBoardState';
 import './CardNode.css';
 
 const DELETE_CONFIRM_MS = 2200;
-
-function autosize(el: HTMLTextAreaElement | null): void {
-  if (!el) return;
-  el.style.height = 'auto';
-  el.style.height = `${el.scrollHeight}px`;
-}
 
 function CardNodeComponent({ id, data, dragging, selected }: NodeProps<CardNodeType>) {
   const { gapIds, updateCard, deleteNode, armedNodeId, onConnectorPointerDown, onExpandCard, focusNodeIds } =
@@ -27,6 +23,10 @@ function CardNodeComponent({ id, data, dragging, selected }: NodeProps<CardNodeT
   const deleteTimer = useRef<number | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [imageError, setImageError] = useState<string | null>(null);
+  const titleRef = useRef<HTMLTextAreaElement>(null);
+  const textRef = useRef<HTMLTextAreaElement>(null);
+  useAutosize(titleRef, data.title);
+  useAutosize(textRef, data.body);
 
   const handleImageChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -79,7 +79,15 @@ function CardNodeComponent({ id, data, dragging, selected }: NodeProps<CardNodeT
       <Handle type="target" position={Position.Left} isConnectable={false} style={{ visibility: 'hidden' }} />
       <Handle type="source" position={Position.Right} isConnectable={false} style={{ visibility: 'hidden' }} />
       <div className="card-node__bar">
-        <span className="card-node__badge">{cfg.short}</span>
+        <span className="card-node__badge-wrap">
+          <span className="card-node__badge">
+            {cfg.short}
+            <span className="card-node__badge-caret" aria-hidden>
+              ▾
+            </span>
+          </span>
+          <CardTypeSelect value={data.nodeType} onChange={(nodeType) => updateCard(id, { nodeType })} />
+        </span>
         <div className="card-node__bar-actions">
           <button
             type="button"
@@ -139,24 +147,34 @@ function CardNodeComponent({ id, data, dragging, selected }: NodeProps<CardNodeT
       )}
       {imageError && <div className="card-node__image-error">{imageError}</div>}
       <div className="card-node__body">
-        <input
+        <textarea
           className="card-node__title nodrag"
           placeholder={`${cfg.label} — title`}
           value={data.title}
+          rows={1}
+          ref={titleRef}
           onChange={(e) => updateCard(id, { title: e.target.value })}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              e.currentTarget.blur();
+            }
+          }}
         />
         <textarea
           className="card-node__text nodrag"
           placeholder={cfg.placeholder}
           value={data.body}
           rows={1}
-          ref={autosize}
-          onChange={(e) => {
-            updateCard(id, { body: e.target.value });
-            autosize(e.target);
-          }}
+          ref={textRef}
+          onChange={(e) => updateCard(id, { body: e.target.value })}
         />
         {isGap && <div className="card-node__gap-tag">⚠ no evidence trail yet</div>}
+        {data.source && (
+          <div className="card-node__source" title={`From "${data.source.docName}":\n“${data.source.quote}”`}>
+            ▤ {data.source.docName}
+          </div>
+        )}
       </div>
       <button
         type="button"

@@ -5,6 +5,7 @@ import {
   createProject,
   deleteProject,
   downloadBoard,
+  duplicateProject,
   exportFilename,
   listProjects,
   loadBoard,
@@ -68,10 +69,8 @@ export function ProjectsPage({ missingProjectId }: ProjectsPageProps) {
   const handleNewFromExample = () => create(seedBoard(), false);
 
   const handleDuplicate = (project: ProjectSummary) => {
-    const doc = loadBoard(project.id);
-    if (!doc) return;
     const copyName = `${project.name || 'Untitled project'} (copy)`;
-    const result = createProject({ ...doc, brief: { ...EMPTY_BRIEF, ...doc.brief, name: copyName } });
+    const result = duplicateProject(project.id, (doc) => ({ ...doc, brief: { ...EMPTY_BRIEF, ...doc.brief, name: copyName } }));
     if (!result.ok) setError(`Couldn't duplicate the project: ${result.reason}`);
     refresh();
   };
