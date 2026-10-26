@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNodesState, useEdgesState, applyNodeChanges, type Node, type Edge, type NodeChange } from '@xyflow/react';
 import { CARD_WIDTH, NODE_TYPE_ORDER } from '../config';
 import { GRID_NOTES_X, GRID_ROW_GAP, cardSlot, estimateCardHeight, frameSlot, gridTop, type Box } from '../lib/grid';
-import { computeGapIds } from '../lib/gaps';
+import { analyseTrace, isStepLink } from '../lib/trace';
 import { computeParallelLanes } from '../lib/parallelEdges';
 import { loadBoard, saveBoard, downloadBoard, exportFilename, projectStorageKey } from '../lib/storage';
 import { seedBoard } from '../data/seed';
@@ -425,14 +425,23 @@ export function useBoardState(projectId: string) {
     });
   }, [nodes, setNodes]);
 
-  const gapIds = useMemo(
+  // Traceability checks (lib/trace.ts): what each card's trace is missing, and links that skip a step.
+  const trace = useMemo(
     () =>
-      computeGapIds(
-        nodes.filter(isCard).map((n) => ({ id: n.id, nodeType: n.data.nodeType })),
-        edges.map((e) => ({ target: e.target })),
+      analyseTrace(
+        nodes.filter(isCard).map((n) => ({
+          id: n.id,
+          nodeType: n.data.nodeType,
+          fromPrototype: n.data.nodeType === 'evidence' && !!n.data.fromPrototypeId,
+        })),
+        edges.filter((e) => e.data).map((e) => ({ id: e.id, source: e.source, target: e.target, kind: e.data!.kind })),
       ),
     [nodes, edges],
   );
+  const traceIssues = trace.issues;
+  const skipLinkIds = trace.skipLinks;
+  /** Cards with any trace issue. */
+  const gapIds = useMemo(() => new Set(trace.issues.keys()), [trace]);
 
   const laneById = useMemo(() => computeParallelLanes(edges), [edges]);
 
@@ -569,7 +578,7 @@ export function useBoardState(projectId: string) {
   const dismissTidyUndo = useCallback(() => setTidyUndo(null), []);
 
   const updateCard = useCallback(
-    (id: string, patch: Partial<Pick<CardData, 'nodeType' | 'title' | 'body' | 'link' | 'image'>>) => {
+    (id: string, patch: Partial<Pick<CardData, 'nodeType' | 'title' | 'body' | 'link' | 'image' | 'fromPrototypeId'>>) => {
       setNodes((prev) => prev.map((n) => (isCard(n) && n.id === id ? { ...n, data: { ...n.data, ...patch } } : n)));
     },
     [setNodes],
@@ -761,9 +770,15 @@ export function useBoardState(projectId: string) {
   );
 
   // ---- CRUD: edges ----
+  /** Links two cards. Links that would skip a step (lib/trace.ts) are refused; callers
+   * explain why before getting here. */
   const addRelation = useCallback(
     (source: string, target: string, kind: EdgeKindId) => {
       if (source === target) return;
+      const typeOf = (id: string) => nodesRef.current.find((n): n is CardNode => isCard(n) && n.id === id)?.data.nodeType;
+      const a = typeOf(source);
+      const b = typeOf(target);
+      if (!a || !b || !isStepLink(a, b, kind)) return;
       setEdges((prev) => {
         const exists = prev.some((e) => e.source === source && e.target === target && e.data?.kind === kind);
         if (exists) return prev;
@@ -780,6 +795,48 @@ export function useBoardState(projectId: string) {
       setEdges((prev) => prev.filter((e) => e.id !== id));
     },
     [setEdges],
+  );
+
+  // ---- iteration: prototype results come back as Evidence ----
+
+  /** Adds an empty Evidence card in the Evidence column, marked as a result of this
+   * Prototype. Returns its id. */
+  const addEvidenceFromPrototype = useCallback(
+    (prototypeId: string) => {
+      const id = crypto.randomUUID();
+      const at = cardSlot(boxesOf(nodesRef.current), 'evidence');
+      const card: CardNode = {
+        id,
+        type: 'card',
+        position: at,
+        data: { nodeType: 'evidence', title: '', body: '', fromPrototypeId: prototypeId },
+        dragHandle: CARD_DRAG_HANDLE,
+      };
+      nodesRef.current = [...nodesRef.current, card];
+      setNodes((prev) => [...prev, card]);
+      return { id, position: at };
+    },
+    [setNodes],
+  );
+
+  /** Turns a link between a Prototype and an Evidence card (which skips the middle of the
+   * chain) into "this evidence came from that prototype": the link goes, the Evidence
+   * card remembers the prototype. */
+  const linkToPrototypeResult = useCallback(
+    (edgeId: string) => {
+      const edge = edges.find((e) => e.id === edgeId);
+      if (!edge) return;
+      const cards = nodesRef.current.filter(isCard);
+      const ends = [edge.source, edge.target].map((id) => cards.find((c) => c.id === id));
+      const prototype = ends.find((c) => c?.data.nodeType === 'prototype');
+      const evidence = ends.find((c) => c?.data.nodeType === 'evidence');
+      if (!prototype || !evidence) return;
+      setNodes((prev) =>
+        prev.map((n) => (isCard(n) && n.id === evidence.id ? { ...n, data: { ...n.data, fromPrototypeId: prototype.id } } : n)),
+      );
+      setEdges((prev) => prev.filter((e) => e.id !== edgeId));
+    },
+    [edges, setNodes, setEdges],
   );
 
   const exportBoard = useCallback(() => {
@@ -850,6 +907,10 @@ export function useBoardState(projectId: string) {
     onNodesChange,
     onEdgesChange,
     gapIds,
+    traceIssues,
+    skipLinkIds,
+    addEvidenceFromPrototype,
+    linkToPrototypeResult,
     laneById,
     saveStatus,
     saveError,

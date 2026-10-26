@@ -78,6 +78,7 @@ function isValidBoardDocument(value: unknown): value is BoardDocument {
     if (data.link !== undefined && typeof data.link !== 'string') return false;
     if (data.image !== undefined && typeof data.image !== 'string') return false;
     if (data.source !== undefined && !isValidCardSource(data.source)) return false;
+    if (data.fromPrototypeId !== undefined && typeof data.fromPrototypeId !== 'string') return false;
   }
   for (const edge of doc.edges) {
     if (!edge || typeof edge !== 'object') return false;

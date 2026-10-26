@@ -18,9 +18,11 @@ interface ToolbarProps {
   onOpenSources: () => void;
   /** How many documents the AI is reading right now. */
   readingCount: number;
+  /** Opens the trace check (links that skip a step, cards missing a step). */
+  onOpenTrace: () => void;
 }
 
-export function Toolbar({ board, initialBriefOpen = false, onOpenSources, readingCount }: ToolbarProps) {
+export function Toolbar({ board, initialBriefOpen = false, onOpenSources, readingCount, onOpenTrace }: ToolbarProps) {
   const { screenToFlowPosition, zoomIn, zoomOut, fitView, setCenter, getZoom } = useReactFlow<CardNode, RelationEdgeType>();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [briefOpen, setBriefOpen] = useState(initialBriefOpen);
@@ -93,6 +95,7 @@ export function Toolbar({ board, initialBriefOpen = false, onOpenSources, readin
   const canGroup = selectedCardIds.length >= 2;
 
   const gapCount = board.gapIds.size;
+  const skipCount = board.skipLinkIds.size;
   const toReview = board.sources.reduce((n, s) => n + (s.proposals?.length ?? 0), 0);
 
   return (
@@ -137,9 +140,15 @@ export function Toolbar({ board, initialBriefOpen = false, onOpenSources, readin
       </div>
       <div className="toolbar__spacer" />
       <SaveStatusIndicator status={board.saveStatus} error={board.saveError} />
-      <div className={`gap-pill${gapCount > 0 ? ' has-gaps' : ''}`}>
+      <button
+        type="button"
+        className={`gap-pill${gapCount + skipCount > 0 ? ' has-gaps' : ''}`}
+        onClick={onOpenTrace}
+        title="Trace check: links that skip a step, and cards missing a step in their trace"
+      >
         {gapCount} {gapCount === 1 ? 'gap' : 'gaps'}
-      </div>
+        {skipCount > 0 && ` · ${skipCount} skipped ${skipCount === 1 ? 'step' : 'steps'}`}
+      </button>
       <span className="toolbar__divider" aria-hidden />
       <button
         type="button"

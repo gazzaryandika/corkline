@@ -150,6 +150,73 @@ something, the chat still answers it (the chat AI is told it can't open links it
 Adding and reading sources lives in `src/state/useSourceActions.ts` (at board level), so reads keep
 going while the panel is closed and the chat can start them.
 
+## AI-suggested links (connections)
+
+Ask the AI Assistant to link cards, and it proposes links for you to review in the chat; nothing is
+drawn until you accept. All four link types: **Leads to**, **Supports**, **Tests**, **Contradicts**.
+
+- **Say it:** "the coins evidence supports the insight about invisible money", "link X to Y", "which
+  evidence supports …?" (`isConnectionRequest` in `ChatPanel.tsx`: words like connect/link, or a link
+  type with an action word or a "this/the …" statement).
+- **✦ Find connections** button: with nothing selected it looks for the clearest missing links,
+  starting with cards marked GAP; with cards selected every link involves one of them; with exactly
+  two selected it reads "✦ Connect these 2" and links those two.
+- **Review in the chat:** each suggestion shows *from card → type → to card* and a one-line reason.
+  Change the type, flip the direction (⇅), accept or reject; **clicking a suggestion highlights its two
+  cards** on the board (dims the rest; Esc or empty canvas clears). **Add N links** draws the accepted
+  ones; links that already exist (for Contradicts, in either direction) are never suggested or added
+  twice. Accepted links then fill gaps as usual.
+- If a request could mean more than one card, the AI is told to ask which one instead of guessing.
+- **Step by step:** the AI only links cards in the same or neighbouring columns (Problem → Assumption →
+  Evidence → Insight → Opportunity → Direction → Prototype), so the reasoning can be traced one step at a
+  time; no Assumption–Prototype shortcuts. Several cards may feed into one (two Assumptions → one
+  Evidence, several Evidence → one Insight). Contradicts may join any two cards. The code enforces this
+  too (`isStepLink` in `lib/trace.ts`): suggestions that skip a column are left out and the chat says
+  how many. The same rule applies to links drawn by hand (see Traceability). Card references the model mentions in its notes ("c9") are replaced
+  with the card's type and title (`withCardNames`).
+- **Tracing a path:** click any line (or its label) and the board highlights its whole path: the two
+  cards, everything leading into the left one and everything following from the right one, all the way
+  along, and zooms to it; the rest dims (Contradicts links aren't followed, as they're a tension rather
+  than a step). Click again, click empty canvas or press Esc to clear. A traced line's label shows a ×
+  to delete it (click, then confirm). (`edgeTrace` in `BoardCanvas.tsx`.)
+- **Links read left to right**, like the lanes (Problem → … → Prototype). A link whose meaning points
+  at a card further left (Evidence *supports* a Problem, a Prototype *tests* an Assumption) is drawn
+  from the left card with its wording turned round: "Problem — **Supported by** → Evidence",
+  "Assumption — **Tested by** → Prototype", "… — **Follows from** → …" (`reverseLabel` in
+  `EDGE_KINDS`, `RelationEdge.tsx`). The stored link keeps its meaning; only how it's drawn and read
+  changes, so this applies to every link, made by the AI or by hand, and the chat's review list reads
+  the same way. Contradicts reads the same both ways.
+
+`src/ai/connections.ts` builds the request (all cards with internal references c1, c2…, existing
+links, SELECTED/GAP flags, the request) and checks the answer: real cards, two different ones, a valid
+type, not already on the board, touching the selection when there is one, at most 10. Instructions:
+`CONNECTIONS_SYSTEM_PROMPT` (what each type means and which way it points; only link what the cards
+say). Mock mode suggests "Evidence supports <gap card>" links.
+
+## Traceability
+
+The board is a chain of justification, one step at a time: Problem → Assumption → Evidence → Insight →
+Opportunity → Direction → Prototype. Every rule is in `src/lib/trace.ts` (`isStepLink`,
+`analyseTrace`, `skipExplanation`), used by the board, the AI and the chat alike.
+
+- **Links:** between neighbouring steps or within one step. Contradicts may join any two cards, but never
+  counts as backing. Links are judged by step, not arrow direction ("Evidence supports Assumption" is the
+  Assumption → Evidence step).
+- **Drawing a skip link by hand** shows why it isn't allowed and the route to take instead; only
+  Contradicts is offered (`EdgeKindMenu` `blockedReason`). `addRelation` refuses skip links too.
+- **Existing skip links** stay, drawn dashed with ⚠ on the label. The toolbar pill ("N gaps · M skipped
+  steps") opens the **Trace check** panel (`components/TracePanel.tsx`): each skip link with Show,
+  ✦ Ask AI for the steps (sent to the chat as a link request, reviewed as usual), Remove link (confirm);
+  a Prototype ↔ Evidence link offers **Mark as prototype result** instead. Below, every flagged card.
+- **Card checks** (amber glow and tag): *needs a link from <previous step>* (satisfied by a step link to
+  the previous column, or by a same-column card that has one); *not backed by evidence* (Opportunity,
+  Direction, Prototype whose chain back along step links never reaches Evidence); *not yet validated by
+  evidence* (an Assumption with no Evidence linked). The AI sees these as TRACE GAP flags and skip links
+  as "SKIPS A STEP".
+- **Iteration:** a Prototype's full view has **+ Add result as Evidence**, which adds an Evidence card in
+  the Evidence column marked `fromPrototypeId` ("↺ from Prototype …" on the card; removable in its full
+  view). That card counts as traced, and feeds new insights for the next version.
+
 ## Grid layout
 
 The board has a grid with one **lane** per card type, left to right in `NODE_TYPE_ORDER`

@@ -469,3 +469,144 @@
 .chat-panel__actions + .chat-panel__context {
   border-top: none;
 }
+
+/* ---- suggested links ---- */
+
+.link-props {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.link-prop {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+.link-prop.is-accepted {
+  background: color-mix(in srgb, #15803d 6%, var(--surface));
+  border-color: color-mix(in srgb, #15803d 35%, var(--border));
+}
+.link-prop.is-rejected {
+  opacity: 0.5;
+}
+
+.link-prop__show {
+  display: block;
+  width: 100%;
+  padding: 2px 4px;
+  margin: 0 -4px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.link-prop__show:hover {
+  background: var(--surface-muted);
+}
+
+.link-prop__card {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--text);
+}
+.link-prop__type {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.link-prop__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.link-prop__kind {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 10px;
+}
+.link-prop__kind select {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 3px;
+  cursor: pointer;
+}
+.link-prop__swap {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.link-prop__swap:hover {
+  border-color: var(--text-faint);
+  color: var(--text);
+}
+
+.link-prop__reason {
+  margin: 2px 0 0;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.link-prop__decide {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 2px;
+}
+.link-prop__decide button {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+.link-prop__decide button.is-accept {
+  color: #fff;
+  background: #15803d;
+  border-color: #15803d;
+}
+.link-prop__decide button.is-reject {
+  color: #fff;
+  background: #57534e;
+  border-color: #57534e;
+}
+
+.chat-link__actions button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

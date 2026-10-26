@@ -1,6 +1,7 @@
 import { NODE_TYPES } from '../config';
 import type { AnyNode, CardNode, RelationEdgeType } from '../state/useBoardState';
 import type { ProjectBrief } from '../types';
+import type { TraceIssue } from '../lib/trace';
 import { AiError, askAi, type AiMode } from './client';
 import { describeBoard, describeBrief } from './boardContext';
 import { SUMMARY_SYSTEM_PROMPT } from './prompts';
@@ -33,7 +34,7 @@ export async function summarise(
   mode: AiMode,
   nodes: AnyNode[],
   edges: RelationEdgeType[],
-  gapIds: Set<string>,
+  traceIssues: Map<string, TraceIssue[]>,
   brief: ProjectBrief,
   /** Only these cards; without it, every card on the board. */
   selectedIds?: string[],
@@ -74,7 +75,7 @@ export async function summarise(
     messages: [
       {
         role: 'user',
-        text: `PROJECT BRIEF\n${describeBrief(brief)}\n\n${scope}\n${describeBoard(scopedNodes, scopedEdges, gapIds)}`,
+        text: `PROJECT BRIEF\n${describeBrief(brief)}\n\n${scope}\n${describeBoard(scopedNodes, scopedEdges, traceIssues)}`,
       },
     ],
     responseSchema: RESPONSE_SCHEMA,

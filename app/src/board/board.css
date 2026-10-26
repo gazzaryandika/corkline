@@ -64,10 +64,54 @@
   stroke-width: 3;
 }
 
-.relation-edge__label {
+/* A link's label (and, on a traced link, its × delete button), placed on the line. */
+.relation-edge__label-wrap {
   position: absolute;
   left: 0;
   top: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  pointer-events: all;
+  transition: opacity 0.18s ease;
+}
+.relation-edge__label-wrap.is-focus-dim {
+  opacity: 0.25;
+}
+.relation-edge__label-wrap.is-focus-highlight .relation-edge__label {
+  box-shadow: var(--shadow-sm), 0 0 10px 1px color-mix(in srgb, currentColor 60%, transparent);
+}
+.relation-edge__label.is-traced {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+}
+
+.relation-edge__delete {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+.relation-edge__delete:hover {
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+.relation-edge__delete.is-confirming {
+  color: #fff;
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+.relation-edge__label {
   font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 700;
@@ -82,13 +126,6 @@
   transition: opacity 0.18s ease, box-shadow 0.18s ease;
 }
 
-.relation-edge__label.is-focus-dim {
-  opacity: 0.25;
-}
-
-.relation-edge__label.is-focus-highlight {
-  box-shadow: var(--shadow-sm), 0 0 10px 1px color-mix(in srgb, currentColor 60%, transparent);
-}
 
 .edge-kind-menu {
   position: fixed;
@@ -188,4 +225,33 @@
   border-radius: 3px;
   padding: 1px 5px;
   letter-spacing: 0.05em;
+}
+
+.edge-kind-menu.is-blocked {
+  width: 272px;
+  border-color: var(--gap-color);
+}
+.edge-kind-menu__blocked {
+  padding: 6px 8px 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--gap-text);
+}
+.edge-kind-menu__blocked strong {
+  display: block;
+  margin-bottom: 2px;
+}
+.edge-kind-menu__blocked-alt {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-muted);
+}
+
+/* A link that skips a step: kept, but shown as a warning until it's fixed (trace check). */
+.relation-edge.is-skip {
+  stroke-dasharray: 3 7;
+}
+.relation-edge__label.is-skip {
+  border-style: dashed;
+  background: var(--gap-bg);
 }

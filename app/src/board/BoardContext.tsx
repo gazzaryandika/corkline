@@ -1,10 +1,18 @@
 import { createContext, useContext } from 'react';
 import type { CardData } from '../types';
+import type { TraceIssue } from '../lib/trace';
 
 export interface BoardContextValue {
-  gapIds: Set<string>;
+  /** What each flagged card's trace is missing (lib/trace.ts). */
+  traceIssues: Map<string, TraceIssue[]>;
+  /** Links that skip a step, drawn as warnings. */
+  skipLinkIds: Set<string>;
+  /** Prototype titles by id, for Evidence cards that came from testing one. */
+  prototypeTitles: Map<string, string>;
+  /** Adds an Evidence card for a result of testing this prototype; returns its id. */
+  addEvidenceFromPrototype: (prototypeId: string) => { id: string };
   laneById: Map<string, { index: number; count: number }>;
-  updateCard: (id: string, patch: Partial<Pick<CardData, 'nodeType' | 'title' | 'body' | 'link' | 'image'>>) => void;
+  updateCard: (id: string, patch: Partial<Pick<CardData, 'nodeType' | 'title' | 'body' | 'link' | 'image' | 'fromPrototypeId'>>) => void;
   deleteNode: (id: string) => void;
   deleteEdge: (id: string) => void;
   armedNodeId: string | null;
@@ -24,6 +32,10 @@ export interface BoardContextValue {
   updateNoteBody: (id: string, body: string) => void;
   /** The summary note whose cards are highlighted right now. */
   highlightedNoteId: string | null;
+  /** Clicking a link traces its path (toggles). */
+  onEdgeClick: (edgeId: string) => void;
+  /** The link whose path is traced right now. */
+  highlightedEdgeId: string | null;
 }
 
 export const BoardContext = createContext<BoardContextValue | null>(null);

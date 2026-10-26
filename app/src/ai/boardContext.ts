@@ -1,6 +1,7 @@
 import { EDGE_KINDS, NODE_TYPES, SOURCE_KINDS } from '../config';
 import type { AnyNode, CardNode, RelationEdgeType } from '../state/useBoardState';
 import type { ProjectBrief, SourceDoc } from '../types';
+import { isStepLink, issueText, type TraceIssue } from '../lib/trace';
 
 const MAX_CONTEXT_CHARS = 40_000;
 
@@ -11,7 +12,7 @@ const MAX_CONTEXT_CHARS = 40_000;
  * back without any internal codes. Selected cards are marked so the model knows
  * what the user is pointing at.
  */
-export function describeBoard(nodes: AnyNode[], edges: RelationEdgeType[], gapIds: Set<string>): string {
+export function describeBoard(nodes: AnyNode[], edges: RelationEdgeType[], traceIssues: Map<string, TraceIssue[]>): string {
   const cards = nodes.filter((n): n is CardNode => n.type === 'card');
   if (cards.length === 0) return 'The board is empty.';
 
@@ -34,9 +35,12 @@ export function describeBoard(nodes: AnyNode[], edges: RelationEdgeType[], gapId
   const cardLines = cards.map((c) => {
     const flags = [
       c.selected ? 'SELECTED' : null,
-      gapIds.has(c.id) ? 'GAP: needs evidence but nothing links into it' : null,
+      traceIssues.has(c.id) ? `TRACE GAP: ${traceIssues.get(c.id)!.map((i) => issueText(i, c.data.nodeType)).join(', ')}` : null,
       c.parentId && groupLabels.has(c.parentId) ? `in group "${groupLabels.get(c.parentId)}"` : null,
       c.data.source ? `from document "${c.data.source.docName}"` : null,
+      c.data.fromPrototypeId && name.has(c.data.fromPrototypeId)
+        ? `result of testing ${name.get(c.data.fromPrototypeId)}`
+        : null,
       c.data.source?.aiType && c.data.source.aiType !== c.data.nodeType
         ? `AI suggested ${NODE_TYPES[c.data.source.aiType].label}; the designer changed the type`
         : null,
@@ -52,7 +56,11 @@ export function describeBoard(nodes: AnyNode[], edges: RelationEdgeType[], gapId
 
   const edgeLines = edges
     .filter((e) => name.has(e.source) && name.has(e.target) && e.data)
-    .map((e) => `- ${name.get(e.source)} —${EDGE_KINDS[e.data!.kind].label}→ ${name.get(e.target)}`);
+    .map((e) => {
+      const types = [e.source, e.target].map((id) => cards.find((c) => c.id === id)!.data.nodeType);
+      const skip = isStepLink(types[0], types[1], e.data!.kind) ? '' : '  (SKIPS A STEP: not part of the trace)';
+      return `- ${name.get(e.source)} —${EDGE_KINDS[e.data!.kind].label}→ ${name.get(e.target)}${skip}`;
+    });
 
   const text = [
     `CARDS (${cards.length}):`,

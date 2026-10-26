@@ -5,16 +5,18 @@ import { useBoardContext } from './BoardContext';
 import { readAndResizeImage } from '../lib/image';
 import { useAutosize } from '../lib/autosize';
 import { CardTypeSelect } from './CardTypeSelect';
+import { issueText } from '../lib/trace';
 import type { CardNode as CardNodeType } from '../state/useBoardState';
 import './CardNode.css';
 
 const DELETE_CONFIRM_MS = 2200;
 
 function CardNodeComponent({ id, data, dragging, selected }: NodeProps<CardNodeType>) {
-  const { gapIds, updateCard, deleteNode, armedNodeId, onConnectorPointerDown, onExpandCard, focusNodeIds } =
+  const { traceIssues, prototypeTitles, updateCard, deleteNode, armedNodeId, onConnectorPointerDown, onExpandCard, focusNodeIds } =
     useBoardContext();
   const cfg = NODE_TYPES[data.nodeType];
-  const isGap = gapIds.has(id);
+  const issues = traceIssues.get(id);
+  const isGap = !!issues;
   const isArmedSource = armedNodeId === id;
   const isFocused = focusNodeIds !== null && focusNodeIds.has(id);
   const isDimmed = focusNodeIds !== null && !isFocused;
@@ -169,7 +171,16 @@ function CardNodeComponent({ id, data, dragging, selected }: NodeProps<CardNodeT
           ref={textRef}
           onChange={(e) => updateCard(id, { body: e.target.value })}
         />
-        {isGap && <div className="card-node__gap-tag">⚠ no evidence trail yet</div>}
+        {issues && (
+          <div className="card-node__gap-tag" title="A step is missing in this card's trace. See the gaps count in the toolbar for all of them.">
+            ⚠ {issues.map((i) => issueText(i, data.nodeType)).join(' · ')}
+          </div>
+        )}
+        {data.fromPrototypeId && prototypeTitles.has(data.fromPrototypeId) && (
+          <div className="card-node__source" title="A result of testing this prototype">
+            ↺ from Prototype “{prototypeTitles.get(data.fromPrototypeId)}”
+          </div>
+        )}
         {data.source && (
           <div className="card-node__source" title={`From "${data.source.docName}":\n“${data.source.quote}”`}>
             ▤ {data.source.docName}

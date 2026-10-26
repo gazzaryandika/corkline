@@ -3,6 +3,7 @@ import { NODE_TYPES } from '../config';
 import { useBoardContext } from './BoardContext';
 import { readAndResizeImage } from '../lib/image';
 import { CardTypeSelect } from './CardTypeSelect';
+import { issueText } from '../lib/trace';
 import type { CardNode } from '../state/useBoardState';
 import './CardDetailModal.css';
 
@@ -20,9 +21,9 @@ function normalizeUrl(raw: string): string | null {
 }
 
 export function CardDetailModal({ node, onClose }: CardDetailModalProps) {
-  const { gapIds, updateCard, deleteNode } = useBoardContext();
+  const { traceIssues, prototypeTitles, addEvidenceFromPrototype, onExpandCard, updateCard, deleteNode } = useBoardContext();
   const cfg = NODE_TYPES[node.data.nodeType];
-  const isGap = gapIds.has(node.id);
+  const issues = traceIssues.get(node.id);
   const dialogRef = useRef<HTMLDivElement>(null);
 
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -107,7 +108,9 @@ export function CardDetailModal({ node, onClose }: CardDetailModalProps) {
             autoFocus
           />
 
-          {isGap && <div className="card-modal__gap-tag">⚠ no evidence trail yet</div>}
+          {issues && (
+            <div className="card-modal__gap-tag">⚠ {issues.map((i) => issueText(i, node.data.nodeType)).join(' · ')}</div>
+          )}
 
           <textarea
             className="card-modal__text"
@@ -128,6 +131,38 @@ export function CardDetailModal({ node, onClose }: CardDetailModalProps) {
                   </span>
                 )}
               </div>
+            </>
+          )}
+
+          {node.data.nodeType === 'evidence' && node.data.fromPrototypeId && (
+            <>
+              <span className="card-modal__field-label">Iteration</span>
+              <div className="card-modal__iteration">
+                <span>
+                  ↺ Result of testing Prototype “
+                  {prototypeTitles.get(node.data.fromPrototypeId) ?? 'a prototype that has been deleted'}”
+                </span>
+                <button type="button" onClick={() => updateCard(node.id, { fromPrototypeId: undefined })} title="Not a prototype result">
+                  ×
+                </button>
+              </div>
+            </>
+          )}
+
+          {node.data.nodeType === 'prototype' && (
+            <>
+              <span className="card-modal__field-label">Iteration</span>
+              <p className="card-modal__hint">
+                Tested this prototype? Its results come back as new Evidence, which then feeds new insights, so the next
+                version stays traceable.
+              </p>
+              <button
+                type="button"
+                className="card-modal__image-add"
+                onClick={() => onExpandCard(addEvidenceFromPrototype(node.id).id)}
+              >
+                + Add result as Evidence
+              </button>
             </>
           )}
 
