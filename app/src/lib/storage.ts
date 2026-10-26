@@ -1,6 +1,6 @@
 import { NODE_TYPES, EDGE_KINDS, SOURCE_KINDS } from '../config';
 import { copyProjectFiles, deleteProjectFiles } from './fileStore';
-import type { BoardDocument } from '../types';
+import type { BoardDocument, NodeTypeId } from '../types';
 
 function isValidSource(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
@@ -107,12 +107,24 @@ interface ProjectIndexEntry {
   id: string;
   createdAt: number;
   updatedAt: number;
+  /** Pinned to the Starred view on the projects page. */
+  starred?: boolean;
+}
+
+/** A tiny map of a board for the projects page's thumbnails, in board coordinates. */
+export interface BoardPreview {
+  cards: Array<{ x: number; y: number; type: NodeTypeId }>;
+  frames: Array<{ x: number; y: number; w: number; h: number }>;
+  notes: Array<{ x: number; y: number }>;
+  links: Array<{ from: number; to: number }>;
 }
 
 export interface ProjectSummary extends ProjectIndexEntry {
   name: string;
   description: string;
   cardCount: number;
+  linkCount: number;
+  preview: BoardPreview;
   /** True when the project's board data is missing or unreadable. */
   broken: boolean;
 }
@@ -220,6 +232,33 @@ export function ensureProjects(fallback: () => BoardDocument): void {
   createProject(isValidBoardDocument(legacy) ? legacy : fallback());
 }
 
+const EMPTY_PREVIEW: BoardPreview = { cards: [], frames: [], notes: [], links: [] };
+
+export function boardPreview(doc: BoardDocument): BoardPreview {
+  const frames = new Map(
+    doc.nodes.flatMap((n) => (n.type === 'group' ? [[n.id, n] as const] : [])),
+  );
+  const cardIndex = new Map<string, number>();
+  const cards: BoardPreview['cards'] = [];
+  for (const n of doc.nodes) {
+    if (n.type !== 'card') continue;
+    // Cards inside a frame store positions relative to it.
+    const parent = n.parentId ? frames.get(n.parentId) : undefined;
+    cardIndex.set(n.id, cards.length);
+    cards.push({ x: n.position.x + (parent?.position.x ?? 0), y: n.position.y + (parent?.position.y ?? 0), type: n.data.nodeType });
+  }
+  return {
+    cards,
+    frames: [...frames.values()].map((g) => ({ x: g.position.x, y: g.position.y, w: g.width, h: g.height })),
+    notes: doc.nodes.flatMap((n) => (n.type === 'note' ? [{ x: n.position.x, y: n.position.y }] : [])),
+    links: doc.edges.flatMap((e) => {
+      const from = cardIndex.get(e.source);
+      const to = cardIndex.get(e.target);
+      return from !== undefined && to !== undefined ? [{ from, to }] : [];
+    }),
+  };
+}
+
 export function listProjects(): ProjectSummary[] {
   return (readIndex() ?? [])
     .map((entry) => {
@@ -229,10 +268,26 @@ export function listProjects(): ProjectSummary[] {
         name: doc?.brief?.name.trim() ?? '',
         description: doc?.brief?.description.trim() ?? '',
         cardCount: doc ? doc.nodes.filter((n) => n.type === 'card').length : 0,
+        linkCount: doc?.edges.length ?? 0,
+        preview: doc ? boardPreview(doc) : EMPTY_PREVIEW,
         broken: !doc,
       };
     })
     .sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+/** Stars or unstars a project. Only the index changes, so it doesn't count as an edit. */
+export function setProjectStarred(id: string, starred: boolean): SaveResult {
+  const index = readIndex() ?? [];
+  return writeIndex(index.map((p) => (p.id === id ? { ...p, starred } : p)));
+}
+
+/** Renames a project (its brief's name). */
+export function renameProject(id: string, name: string): SaveResult {
+  const doc = loadBoard(id);
+  if (!doc) return { ok: false, reason: 'The project could not be read.' };
+  const blank = { name: '', description: '', users: '', context: '', stage: '', notes: '' };
+  return saveBoard(id, { ...doc, brief: { ...blank, ...doc.brief, name } });
 }
 
 /** e.g. "Triodos Project" → "corkline-triodos-project.json". */

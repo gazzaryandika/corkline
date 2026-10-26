@@ -1,6 +1,31 @@
 # Corkline — Handover
 
-Last updated: 2026-10-07 (Traceability; branch `feature/ai-connections`)
+Last updated: 2026-10-21 (Projects home / landing page; branch `feature/landing-page`)
+
+## Projects home / landing page (2026-10-21, Gazza; branch `feature/landing-page`, built on `feature/ai-connections`)
+
+The projects page was redesigned as a dashboard in the style of Miro, Figma and Canva
+(`app/src/pages/ProjectsPage.tsx`, `ProjectsPage.css`, `BoardThumbnail.tsx`).
+
+- **Layout:** a left sidebar (Home, Starred, Templates, plus a note that projects live in this browser
+  only) and a sticky top bar with search (press `/`) and **+ New project**. On narrow screens the
+  sidebar becomes a top bar and the templates a swipeable row.
+- **Start something new:** four templates. Blank board (opens the Project panel), **Welcome to
+  Corkline**, the Triodos Kids example, and Import a board (.json).
+- **Welcome to Corkline** (`app/src/data/welcome.ts`) is a guided tour like Miro's welcome board. Eight
+  cards each explain their own card type and one thing to try. They form a correctly traced chain, plus
+  one Insight left unlinked on purpose so its amber gap flag explains itself (checked with
+  `analyseTrace`: 0 skipped links, only that card flagged). A brand-new browser now starts with this
+  board instead of the Triodos example.
+- **Project cards** show a live miniature of the board (cards in their type colours, frames, notes,
+  links), with name, last edited and card count.
+  - ☆ star (stored in the project index, so starring doesn't count as an edit).
+  - ⋯ menu: Open, Rename (inline, whole name selected), Duplicate, Export as file, and Delete (click
+    twice). The menu flips upward near the bottom of the window.
+- **Sort and layout:** sort by last edited, name or date created; grid or list view. The list adds
+  link count and date created. Sort and layout are remembered per browser (`corkline-projects-view`).
+- **Storage additions** (`app/src/lib/storage.ts`): `starred` on index entries, plus `boardPreview()`,
+  `setProjectStarred()` and `renameProject()`.
 
 ## Traceability: one step at a time (2026-10-07, Ayan; same branch `feature/ai-connections`)
 
