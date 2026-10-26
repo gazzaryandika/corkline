@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import { CARD_WIDTH, NODE_TYPE_ORDER, NODE_TYPES } from '../config';
 import { parseImportedBoard } from '../lib/storage';
@@ -8,6 +8,8 @@ import { SaveStatusIndicator } from './SaveStatusIndicator';
 import { ProjectBriefModal } from './ProjectBriefModal';
 import { goToProjects } from '../lib/route';
 import './Toolbar.css';
+
+const TIDY_CONFIRM_MS = 5000;
 
 interface ToolbarProps {
   board: BoardState;
@@ -19,18 +21,47 @@ interface ToolbarProps {
 }
 
 export function Toolbar({ board, initialBriefOpen = false, onOpenSources, readingCount }: ToolbarProps) {
-  const { screenToFlowPosition, zoomIn, zoomOut, fitView } = useReactFlow<CardNode, RelationEdgeType>();
+  const { screenToFlowPosition, zoomIn, zoomOut, fitView, setCenter, getZoom } = useReactFlow<CardNode, RelationEdgeType>();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [briefOpen, setBriefOpen] = useState(initialBriefOpen);
 
+  /** Adds a card in its type's grid column, and brings it into view if it landed off-screen. */
   const handleAdd = useCallback(
     (nodeType: NodeTypeId) => {
-      const center = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
-      const jitter = (Math.random() - 0.5) * 70;
-      board.addNode(nodeType, { x: center.x - CARD_WIDTH / 2 + jitter, y: center.y - 50 + jitter });
+      const { position } = board.addNode(nodeType);
+      const canvas = document.querySelector('.react-flow')?.getBoundingClientRect();
+      if (!canvas) return;
+      const topLeft = screenToFlowPosition({ x: canvas.left, y: canvas.top });
+      const bottomRight = screenToFlowPosition({ x: canvas.right, y: canvas.bottom });
+      const visible =
+        position.x >= topLeft.x &&
+        position.x + CARD_WIDTH <= bottomRight.x &&
+        position.y >= topLeft.y &&
+        position.y + 100 <= bottomRight.y;
+      if (!visible) {
+        setCenter(position.x + CARD_WIDTH / 2, position.y + 60, { zoom: Math.max(getZoom(), 0.75), duration: 400 });
+      }
     },
-    [board, screenToFlowPosition],
+    [board, screenToFlowPosition, setCenter, getZoom],
   );
+
+  // Tidy moves everything, so it takes a second click to confirm (an in-page confirm,
+  // since some browsers, like the desktop app's preview pane, block window.confirm).
+  const [confirmingTidy, setConfirmingTidy] = useState(false);
+  const tidyTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(tidyTimer.current), []);
+
+  const handleTidy = useCallback(() => {
+    window.clearTimeout(tidyTimer.current);
+    if (!confirmingTidy) {
+      setConfirmingTidy(true);
+      tidyTimer.current = window.setTimeout(() => setConfirmingTidy(false), TIDY_CONFIRM_MS);
+      return;
+    }
+    setConfirmingTidy(false);
+    board.tidyBoard();
+    window.setTimeout(() => fitView({ padding: 0.15, duration: 500 }), 120);
+  }, [board, confirmingTidy, fitView]);
 
   const handleImportClick = () => fileInputRef.current?.click();
 
@@ -118,6 +149,19 @@ export function Toolbar({ board, initialBriefOpen = false, onOpenSources, readin
         onClick={() => board.groupSelection(selectedCardIds)}
       >
         ▢ Group
+      </button>
+      <button
+        type="button"
+        className={`group-btn toolbar__tidy${confirmingTidy ? ' is-confirming' : ''}`}
+        title={
+          confirmingTidy
+            ? 'Click again to move every card into its column (Problem → Assumption → Evidence → Insight → Opportunity → Direction → Prototype). You can undo right after.'
+            : "Sort every card into its type's column (you can undo right after)"
+        }
+        onClick={handleTidy}
+        disabled={!board.nodes.some((n) => n.type === 'card')}
+      >
+        {confirmingTidy ? '⊞ Confirm tidy' : '⊞ Tidy board'}
       </button>
       <span className="toolbar__divider" aria-hidden />
       <div className="toolbar__io">

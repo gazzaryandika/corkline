@@ -12,6 +12,8 @@ import type { ThemeProposal } from './types';
 import { BoardCanvas } from './board/BoardCanvas';
 import { clearNewMarker } from './lib/route';
 
+const TIDY_UNDO_MS = 30_000;
+
 interface BoardScreenProps {
   projectId: string;
   /** Just created: open the Project panel straight away so it gets a name. */
@@ -59,6 +61,14 @@ export function BoardScreen({ projectId, isNew }: BoardScreenProps) {
 
   const isEmpty = !board.nodes.some((n) => n.type === 'card');
 
+  // The Undo offer after "Tidy board" goes away on its own after a while.
+  const { canUndoTidy, dismissTidyUndo } = board;
+  useEffect(() => {
+    if (!canUndoTidy) return;
+    const id = window.setTimeout(dismissTidyUndo, TIDY_UNDO_MS);
+    return () => window.clearTimeout(id);
+  }, [canUndoTidy, dismissTidyUndo]);
+
   return (
     <ReactFlowProvider>
       <div className="app-shell">
@@ -75,6 +85,11 @@ export function BoardScreen({ projectId, isNew }: BoardScreenProps) {
             action={{ label: 'Reload', onClick: board.reloadFromStorage }}
           >
             This board changed in another tab.
+          </Banner>
+        )}
+        {board.canUndoTidy && (
+          <Banner tone="info" onDismiss={board.dismissTidyUndo} action={{ label: 'Undo', onClick: board.undoTidy }}>
+            Board tidied: every card is in its type&rsquo;s column.
           </Banner>
         )}
         <main className="app-main">

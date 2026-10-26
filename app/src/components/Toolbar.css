@@ -173,3 +173,17 @@
   font-size: 9.5px;
   font-weight: 700;
 }
+
+/* A button waiting for its confirming second click (e.g. Tidy board). */
+.group-btn.is-confirming {
+  color: #92400e;
+  background: #fffbeb;
+  border-color: #f59e0b;
+}
+
+/* Same width in both states, so the confirming second click lands on the same button
+   (a wider label could wrap the toolbar and move it). */
+.toolbar__tidy {
+  width: 124px;
+  text-align: center;
+}

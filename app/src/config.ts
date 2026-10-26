@@ -4,14 +4,16 @@ import type { EdgeKindConfig, EdgeKindId, NodeTypeConfig, NodeTypeId, SourceKind
 // like it could be an Opportunity node (the original had both use #e08a1e).
 export const GAP_COLOR = '#c2410c';
 
+/** The order of card types everywhere: toolbar, legend, dropdowns, and the board's
+ * grid columns, left to right. Follows the design process from problem to prototype. */
 export const NODE_TYPE_ORDER: NodeTypeId[] = [
   'problem',
+  'assumption',
   'evidence',
   'insight',
   'opportunity',
   'direction',
   'prototype',
-  'assumption',
 ];
 
 export const NODE_TYPES: Record<NodeTypeId, NodeTypeConfig> = {

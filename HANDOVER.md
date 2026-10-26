@@ -2,6 +2,42 @@
 
 Last updated: 2026-10-06 (Sources: documents → draft cards; branch `feature/document-upload`)
 
+## Grid layout (2026-10-07, Ayan; branch `feature/grid-layout`, built on `feature/summary-notes`)
+
+**Done: feature 1 of the backlog (issue #3).** Cards no longer appear at random: the board has an
+invisible grid with one column per card type, **Problem → Assumption → Evidence → Insight → Opportunity
+→ Direction → Prototype**, and new cards go below the last one in their column. Details in
+`app/README.md` → "Grid layout".
+
+Decisions (with Ayan, answering the open questions in #3):
+- **Prototype goes after Direction.**
+- **⊞ Tidy board** button sorts existing boards into the grid (asks first; Undo for 30 s). New cards
+  always follow the grid.
+- **Cards from documents and AI theme frames use the same columns** (replacing the old "row below the
+  board" layouts).
+- **The same order everywhere**: toolbar, legend, type dropdowns.
+- Cards can still be dragged freely; the grid only decides where things first appear.
+- **Lanes with two columns** (Ayan): each category's lane has two card columns; 10 cards stack in the
+  first before the second is used, then a new two-column block starts below.
+- **Lane guides** (Ayan): faint lines between lanes and a label at the top of each. Appear on a new
+  board as soon as its first card is added; on older boards once tidied; saved per board.
+- **Lanes are 900 px wide** (Ayan: two theme frames side by side looked cramped at 700 px): two frames
+  fit side by side with an 80 px gutter between them and from each divider. Boards tidied with the
+  earlier 700 px lanes need tidying again (their guide lines no longer match the old positions).
+- Tidy board confirms with a second click (amber "Confirm tidy"), not a pop-up: the desktop app's
+  preview pane blocks `window.confirm`, which made the first version silently do nothing. **↺ Reset to
+  example and ⇧ Import still use `window.confirm` / `alert`** and so don't work in that pane (they do in
+  a normal browser); worth switching to the same in-page confirm.
+
+Tested 2026-10-07 (lanes): 13 Evidence cards → 10 in the first column, 3 in the second; a new Evidence
+card went to the second column; a theme frame and a loose card in the Assumption lane line up; guides
+appear after Tidy, are saved, and Undo restores positions and turns them off; a new project shows all
+seven lane labels.
+
+Tested 2026-10-07: toolbar cards stack per column; a scattered board with a theme frame and a summary
+note tidied correctly (frame in the column of its cards' type, note in its own column) and Undo
+restored every position; document cards and a new theme frame landed in their columns.
+
 ## Summary notes (2026-10-06, Ayan; branch `feature/summary-notes`, built on `feature/ai-themes`)
 
 **Done: AI summaries go on the board as yellow notes**, not in the chat. ✦ Summarise (or typing
@@ -28,7 +64,7 @@ frames. Details in `app/README.md` → "Themes".
 
 Decisions (with Ayan):
 - **Theme frames**, i.e. the existing group frames: cards in a theme are gathered together (affinity
-  mapping), in a band below the board, one column per card type.
+  mapping), in their card type's column (originally a band below the board; changed by the grid layout).
 - **Themes within one card type** (Evidence themes, Assumption themes, …), all types considered.
 - **One theme per card**, the strongest fit. The designer can take a card out: in the review (×) or later
   on the board (right-click → Remove from "…", new).

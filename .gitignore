@@ -1,1 +1,4 @@
 .DS_Store
+
+# Board exports (Corkline's Export button) saved into the project folder: personal project data, not code
+/corkline-*.json
