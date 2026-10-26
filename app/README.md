@@ -58,15 +58,23 @@ as part of the new architecture rather than patched on top of the old code:
 
 ## Projects
 
-The app opens on a **Projects page** listing every project, with New, From example, Import, Duplicate,
-Export and Delete. Each project has its own board and Project brief. Everything is stored in this
-browser's localStorage only, so use Export to back a project up or move it to another computer.
+The app opens on a **projects home** styled like a Miro, Figma or Canva dashboard.
 
-- `src/pages/ProjectsPage.tsx`: the projects page.
+- **Sidebar:** Home, Starred and Templates.
+- **Top bar:** search (`/` focuses it) and **+ New project**.
+- **Templates:** Blank board, Welcome to Corkline (a guided tour), the Triodos Kids example, and Import.
+- **Your projects:** shown as cards with a miniature of each board. Star a project, or use the ⋯ menu to
+  Rename, Duplicate, Export or Delete it. Sort by last edited, name or date created, in grid or list view.
+
+Everything is stored in this browser's localStorage only, so use Export to back a project up or move it
+to another computer.
+
+- `src/pages/ProjectsPage.tsx`: the projects home. `BoardThumbnail.tsx` draws the board miniatures.
+- `src/data/welcome.ts`: the Welcome to Corkline tour board (also what a brand-new browser starts with).
 - `src/lib/route.ts`: a tiny hash router (`#/` for projects, `#/project/<id>` for a board).
 - `src/BoardScreen.tsx`: one project's board (toolbar, canvas, legend, chat).
-- `src/lib/storage.ts`: the project list plus a per-project board, and a one-time migration of the old
-  single board.
+- `src/lib/storage.ts`: the project list (with stars) plus a per-project board, previews, rename, and a
+  one-time migration of the old single board.
 
 ## AI (Google Gemini)
 
