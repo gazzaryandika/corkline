@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  /* Transparent overlay for demo shot 8: a title card next to the AI Assistant panel. Rendered per frame via window.render(t). */
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: transparent; font-family: Inter, sans-serif; }
+  #card { position: absolute; left: 1010px; top: 50%; width: 820px; padding: 52px 56px 50px;
+    border-radius: 28px; color: #fff;
+    background: linear-gradient(150deg, rgba(42,37,80,.96) 0%, rgba(62,48,120,.96) 60%, rgba(120,78,110,.96) 100%);
+    box-shadow: 0 40px 90px rgba(10,5,30,.55), 0 4px 14px rgba(10,5,30,.35), inset 0 1px 0 rgba(255,255,255,.12); }
+  #kicker { display: flex; align-items: center; gap: 14px; font: 600 20px 'IBM Plex Mono', monospace;
+    letter-spacing: .3em; color: #ffcf9e; margin-bottom: 22px; }
+  #kicker i { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; font-style: normal;
+    background: linear-gradient(135deg, #0d9488, #7c3aed); color: #fff; font: 700 18px Inter; letter-spacing: 0; }
+  #head { font: 800 56px/1.06 Inter; letter-spacing: -0.035em; margin-bottom: 34px; }
+  #head em { font-style: normal; color: #ffd9b3; }
+  ul { list-style: none; padding: 0; display: grid; gap: 18px; }
+  li { display: flex; align-items: center; gap: 18px; font: 500 30px/1.2 Inter; letter-spacing: -0.01em; color: #efeaff; }
+  li b { flex: none; width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center;
+    background: rgba(255,255,255,.12); color: #ffcf9e; font: 700 20px Inter; }
+  li.key { color: #fff; font-weight: 700; }
+  li.key b { background: #ffcf9e; color: #2a2550; }
+</style>
+</head>
+<body>
+<div id="card">
+  <div id="kicker"><i>✦</i>AI ASSISTANT</div>
+  <div id="head">A second pair of eyes<br/>on <em>your reasoning</em>.</div>
+  <ul>
+    <li><b>?</b>Ask anything about your board</li>
+    <li><b>!</b>Spots gaps and weak claims</li>
+    <li><b>↔</b>Suggests links, themes, summaries</li>
+    <li class="key"><b>✓</b>You decide. It never invents ideas.</li>
+  </ul>
+</div>
+<script>
+  const clamp = (v) => Math.min(1, Math.max(0, v));
+  const out = (u) => 1 - Math.pow(1 - u, 3);
+  const card = document.getElementById('card');
+  const parts = [document.getElementById('kicker'), document.getElementById('head'), ...document.querySelectorAll('li')];
+  // [in, out] times in seconds, relative to the shot
+  const T_IN = 2.0, T_OUT = 10.6;
+  const starts = [2.25, 2.45, 3.1, 3.65, 4.2, 4.85];
+  window.render = (t) => {
+    const a = out(clamp((t - T_IN) / 0.5)), z = clamp((t - T_OUT) / 0.6);
+    card.style.opacity = a * (1 - z);
+    card.style.transform = `translateY(-50%) translateX(${(1 - a) * 60 + z * 30}px) scale(${0.97 + 0.03 * a})`;
+    parts.forEach((el, i) => {
+      const u = out(clamp((t - starts[i]) / 0.4));
+      el.style.opacity = u;
+      el.style.transform = `translateY(${(1 - u) * 14}px)`;
+    });
+  };
+  window.render(0);
+</script>
+</body>
+</html>

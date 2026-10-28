@@ -2,3 +2,17 @@
 
 # Board exports (Corkline's Export button) saved into the project folder: personal project data, not code
 /corkline-*.json
+
+# Video pipeline: dependencies and intermediate frames
+/video/node_modules/
+/video/*-frames/
+/video/frames/
+/video/out/
+/video/still-*.png
+# Rebuilt in seconds by the video scripts, and too big to be worth versioning
+/video/assembly/corkline-rough-cut.mp4
+/video/assembly/voiceover.wav
+/video/assembly/*placeholder*
+/video/assembly/02b-distill-4s.mp4
+/video/assembly/parts.txt
+/video/assembly/voice/*.pcm

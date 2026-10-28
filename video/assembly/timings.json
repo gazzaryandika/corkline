@@ -1,0 +1,97 @@
+[
+  {
+    "name": "Title slide",
+    "start": 0,
+    "dur": 6.5
+  },
+  {
+    "name": "Intro 1 · scattered",
+    "start": 6.5,
+    "dur": 10
+  },
+  {
+    "name": "Intro 2 · only in your head",
+    "start": 16.5,
+    "dur": 8
+  },
+  {
+    "name": "Intro 2b · distill (5.5 s cut)",
+    "start": 24.5,
+    "dur": 5.5
+  },
+  {
+    "name": "Intro 2c · introducing Corkline",
+    "start": 30,
+    "dur": 3
+  },
+  {
+    "name": "Intro 3 · pulling it together",
+    "start": 33,
+    "dur": 8
+  },
+  {
+    "name": "Demo 1 · new project",
+    "start": 41,
+    "dur": 5.966666666666667
+  },
+  {
+    "name": "Demo 2 · add the brief (Mock)",
+    "start": 46.96666666666667,
+    "dur": 8.5
+  },
+  {
+    "name": "Demo 3 · review cards (Mock)",
+    "start": 55.46666666666667,
+    "dur": 9.833333333333334
+  },
+  {
+    "name": "Demo 4 · link by hand",
+    "start": 65.3,
+    "dur": 5.5
+  },
+  {
+    "name": "Demo 5 · add an Assumption",
+    "start": 70.8,
+    "dur": 12.933333333333334
+  },
+  {
+    "name": "Demo 6 · interview (Mock)",
+    "start": 83.73333333333333,
+    "dur": 22.3
+  },
+  {
+    "name": "Demo 7 · the board grows",
+    "start": 106.03333333333333,
+    "dur": 10
+  },
+  {
+    "name": "Demo 8 · AI Assistant",
+    "start": 116.03333333333333,
+    "dur": 11.5
+  },
+  {
+    "name": "Demo 9 · Find connections (Mock)",
+    "start": 127.53333333333333,
+    "dur": 15
+  },
+  {
+    "name": "Reflection 1 · goal, what worked",
+    "start": 142.53333333333333,
+    "dur": 10
+  },
+  {
+    "name": "Reflection 2 · limits, AI growth",
+    "start": 152.53333333333333,
+    "dur": 10
+  },
+  {
+    "name": "Reflection 3 · garbage in, garbage out",
+    "start": 162.53333333333333,
+    "dur": 10
+  },
+  {
+    "name": "Reflection 4 · closing",
+    "start": 172.53333333333333,
+    "dur": 5
+  }
+]

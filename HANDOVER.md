@@ -1,6 +1,20 @@
 # Corkline — Handover
 
-Last updated: 2026-10-21 (Projects home / landing page; branch `feature/landing-page`)
+Last updated: 2026-10-28 (demo video; branch `feature/demo-video`)
+
+## Demo video (2026-10-28, Gazza; branch `feature/demo-video`)
+
+The course demo video is in `video/` — final file `video/assembly/corkline-with-voice.mp4` (2:57.5 of the 3:00
+limit). How it's built and rebuilt: `video/README.md`; the voiceover lines and timeline: `video/assembly/VOICEOVER.md`.
+
+- **Structure:** title slide (names + student numbers) → motivation (~35 s animated intro) → demo (~1:42, one
+  project from a blank board to "0 gaps": brief, review, linking, own card, interview, the AI Assistant, Find
+  connections) → reflection (35 s: the goal, what worked, limits, "garbage in, garbage out", closing).
+- **How:** the real app is driven by Playwright and filmed frame by frame; the camera, cursor and clicks are added
+  afterwards. Each shot starts exactly where the last one ended. The voice is Gemini TTS (voice "Charon").
+- **Open:** shots 2, 3, 6 and 9 still show **Mock** AI output; re-film them with Gemini and real material before
+  calling the video final (HANDOVER's rule: model output is never faked on screen). The interview and the shot-7
+  cards are illustrative, and the voiceover says so.
 
 ## Projects home / landing page (2026-10-21, Gazza; branch `feature/landing-page`, built on `feature/ai-connections`)
 

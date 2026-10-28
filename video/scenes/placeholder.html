@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@600&family=Inter:wght@500;800&display=swap" rel="stylesheet" />
+<style>
+  /* A stand-in card for a section that isn't made yet: ?k=KICKER&h=HEADLINE */
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; font-family: Inter, sans-serif; }
+  body { background: radial-gradient(ellipse at 25% 20%, rgba(255,255,255,.18), rgba(255,255,255,0) 60%), linear-gradient(135deg, #2a2550 0%, #4b3a86 55%, #c9875f 100%);
+    display: grid; place-content: center; text-align: center; color: #fff; }
+  #k { font: 600 22px 'IBM Plex Mono', monospace; letter-spacing: .32em; color: #ffcf9e; margin-bottom: 22px; }
+  #h { font: 800 76px/1.05 Inter; letter-spacing: -0.035em; }
+  #s { margin-top: 26px; font: 500 28px Inter; color: rgba(255,255,255,.7); }
+</style>
+</head>
+<body><div id="k"></div><div id="h"></div><div id="s">Placeholder · not made yet</div>
+<script>
+  const q = new URLSearchParams(location.search);
+  document.getElementById('k').textContent = q.get('k');
+  document.getElementById('h').textContent = q.get('h');
+  window.render = () => {};
+</script>
+</body>
+</html>
