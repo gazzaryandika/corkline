@@ -1,0 +1,13 @@
+import { chromium } from 'playwright';
+const b = await chromium.launch();
+const p = await (await b.newContext({ viewport: { width: 1600, height: 900 } })).newPage();
+await p.goto('http://localhost:5173/');
+await p.evaluate(() => localStorage.clear());
+await p.reload();
+await p.waitForTimeout(800);
+await p.getByText('Blank board', { exact: true }).click();
+await p.waitForTimeout(1000);
+await p.screenshot({ path: 'still-new.png' });
+const f = await p.locator('input:focus, textarea:focus').first();
+console.log(JSON.stringify(await f.boundingBox()), await p.evaluate(() => location.hash));
+await b.close();

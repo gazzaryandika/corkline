@@ -1,0 +1,10 @@
+import { chromium } from 'playwright';
+const b = await chromium.launch();
+const p = await (await b.newContext({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1 })).newPage();
+await p.goto('http://localhost:5173/');
+await p.evaluate(() => localStorage.clear());
+await p.reload();
+await p.waitForTimeout(1200);
+await p.screenshot({ path: 'still-home.png' });
+console.log(JSON.stringify(await p.locator('button:has-text("New project")').first().boundingBox()));
+await b.close();

@@ -1,0 +1,518 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; font-family: Inter, sans-serif; }
+  #bg { position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse at 25% 20%, rgba(255,255,255,.18), rgba(255,255,255,0) 60%),
+      linear-gradient(135deg, #2a2550 0%, #4b3a86 55%, #c9875f 100%); }
+  #world { position: absolute; inset: 0; transform-origin: 50% 50%; }
+  .item { position: absolute; left: 0; top: 0; background: #fff; border-radius: 14px;
+    box-shadow: 0 18px 40px rgba(20,10,50,.35), 0 2px 6px rgba(20,10,50,.2); padding: 16px 18px;
+    will-change: transform; }
+  .tag { font: 600 13px 'IBM Plex Mono', monospace; letter-spacing: .04em; color: #6b6880;
+    display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .chip { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center;
+    color: #fff; font: 700 11px Inter; }
+  .line { height: 9px; border-radius: 5px; background: #e7e5ef; margin: 8px 0; }
+  .sticky { position: absolute; left: 0; top: 0; will-change: transform; border-radius: 4px; padding: 18px; font: 600 21px/1.25 Inter; color: #3b3320;
+    box-shadow: 0 16px 32px rgba(20,10,50,.35); }
+  .wave { display: flex; align-items: center; gap: 4px; height: 54px; }
+  .wave i { display: block; width: 5px; border-radius: 3px; background: #7c5cff; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; }
+  .grid i { height: 18px; background: #eef2ee; }
+  .grid i.h { background: #cfe8d6; }
+  #dim { position: absolute; inset: 0; background: radial-gradient(ellipse 52% 30% at 50% 52%, rgba(22,14,48,.78), rgba(22,14,48,0) 100%); }
+  #text { position: absolute; left: 0; right: 0; top: 50%; text-align: center; color: #fff; }
+  #question { position: absolute; left: 0; right: 0; top: 34%; text-align: center; color: #fff;
+    font: 700 64px/1.1 Inter; letter-spacing: -0.03em; text-shadow: 0 6px 30px rgba(10,5,30,.45); }
+  #kicker { font: 600 20px 'IBM Plex Mono', monospace; letter-spacing: .32em; color: #ffcf9e; margin-bottom: 18px; }
+  #headline { font: 800 92px/1.02 Inter; letter-spacing: -0.035em; text-shadow: 0 6px 30px rgba(10,5,30,.5); }
+  #links { position: absolute; left: 0; top: 0; overflow: visible; z-index: 100; pointer-events: none; }
+  #links line { stroke: #fff; stroke-width: 5; stroke-dasharray: 14 11; stroke-linecap: round; }
+  #links circle.end { fill: #fff; }
+  #links g.q circle { fill: #ffcf9e; }
+  #links g.q text { font: 800 30px Inter; fill: #2a2550; text-anchor: middle; dominant-baseline: central; }
+  #text2 { position: absolute; left: 0; right: 0; top: 50%; text-align: center; color: #fff; }
+  #head2 { font: 800 80px/1.04 Inter; letter-spacing: -0.035em; text-shadow: 0 6px 30px rgba(10,5,30,.5); }
+  #sub2 { margin-top: 22px; font: 500 40px/1.2 Inter; letter-spacing: -0.015em; color: #ffd9b3; text-shadow: 0 4px 20px rgba(10,5,30,.5); }
+  /* clip 2b: wall of text */
+  #wall { position: absolute; inset: 0; opacity: 0; transform-origin: 50% 50%; }
+  #pages { position: absolute; left: 0; top: 0; width: 1920px; }
+  .page { position: absolute; top: 0; width: 560px; background: #fff; border-radius: 14px; padding: 28px 30px 40px;
+    box-shadow: 0 24px 60px rgba(20,10,50,.4); font: 400 21px/1.6 Inter; color: #2b2840; }
+  .page.ideas { background: #fffbea; }
+  .page h4 { font: 600 15px 'IBM Plex Mono', monospace; letter-spacing: .04em; color: #6b6880; margin-bottom: 16px;
+    display: flex; align-items: center; gap: 10px; }
+  .page p { margin: 0 0 14px; }
+  .page .sp { font: 600 14px 'IBM Plex Mono', monospace; color: #9a97ad; margin-right: 6px; }
+  .page .scrib { font-style: italic; font-weight: 500; }
+  .fill { color: inherit; }
+  .hl { border-radius: 5px; padding: 1px 4px; margin: 0 -4px; background-repeat: no-repeat; background-size: 0% 100%; font-weight: 600; }
+  .hl.ev { background-image: linear-gradient(#99f6e4, #99f6e4); }
+  .hl.in { background-image: linear-gradient(#ddd6fe, #ddd6fe); }
+  .hl.op { background-image: linear-gradient(#fed7aa, #fed7aa); }
+  #wlinks { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+  #wlinks path { fill: none; stroke: #6d4aff; stroke-width: 5; stroke-linecap: round; }
+  #wlinks circle { fill: #6d4aff; }
+  #cap { position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%); opacity: 0; white-space: nowrap;
+    background: rgba(26,18,56,.86); color: #fff; font: 700 44px/1.2 Inter; letter-spacing: -0.02em;
+    padding: 20px 36px; border-radius: 18px; box-shadow: 0 18px 40px rgba(10,5,30,.4); }
+  /* clip 3: pulling it together */
+  #board { position: absolute; left: 90px; top: 64px; right: 90px; bottom: 64px; border-radius: 26px; opacity: 0;
+    background-color: #f7f6f2; background-image: radial-gradient(#d9d6cf 1.6px, transparent 1.7px); background-size: 28px 28px;
+    box-shadow: 0 30px 80px rgba(15,8,40,.45); transform-origin: 50% 50%; }
+  #cards { position: absolute; inset: 0; pointer-events: none; transform-origin: 50% 50%; }
+  .lane { position: absolute; top: 150px; font: 600 17px 'IBM Plex Mono', monospace; letter-spacing: .22em; opacity: 0; }
+  .cc { position: absolute; left: 0; top: 0; border-radius: 12px; opacity: 0; overflow: visible; }
+  .cc .hd { overflow: hidden; display: flex; align-items: center; gap: 8px; font: 600 15px 'IBM Plex Mono', monospace;
+    letter-spacing: .06em; padding: 0 16px; border-radius: 12px 12px 0 0; }
+  .cc .hd i { width: 9px; height: 9px; border-radius: 50%; display: block; }
+  .cc .tt { position: relative; }
+  .cc .tt span { display: block; }
+  .cc .tt .b { position: absolute; left: 0; top: 0; right: 0; }
+  .cc .dot { position: absolute; right: -13px; top: 50%; width: 26px; height: 26px; margin-top: -13px; border-radius: 50%;
+    background: #fff; border: 2.5px solid; opacity: 0; }
+  .cc .dot::after { content: ''; position: absolute; inset: 8px; border-radius: 50%; background: currentColor; }
+  #clinks { position: absolute; left: 0; top: 0; overflow: visible; }
+  #clinks path { fill: none; stroke-width: 3.5; stroke-dasharray: 12 9; stroke-linecap: round; }
+  .elabel { position: absolute; left: 0; top: 0; font: 600 13px 'IBM Plex Mono', monospace; letter-spacing: .08em; background: #fff;
+    border: 2px solid; border-radius: 999px; padding: 3px 11px; opacity: 0; white-space: nowrap; }
+  /* hero: Introducing Corkline */
+  #veil { position: absolute; inset: 0; opacity: 0; background: rgba(24,16,52,.62); backdrop-filter: blur(16px); }
+  #hero { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; opacity: 0; color: #fff; }
+  #hero .kick { font: 600 26px 'IBM Plex Mono', monospace; letter-spacing: .45em; color: #ffcf9e; margin-bottom: 30px; padding-left: .45em; }
+  #hero .row { display: flex; align-items: center; gap: 40px; }
+  #hero .mark { width: 128px; height: 128px; border-radius: 30px; background: linear-gradient(135deg, #0d9488, #7c3aed);
+    box-shadow: 0 20px 50px rgba(10,5,30,.45), inset 0 2px 0 rgba(255,255,255,.25); position: relative; }
+  #hero .mark svg { position: absolute; inset: 0; }
+  #hero .word { font: 700 150px/1 'IBM Plex Mono', monospace; letter-spacing: .02em; display: flex; text-shadow: 0 10px 40px rgba(10,5,30,.45); }
+  #hero .word span { display: inline-block; }
+  #hero .tag { margin-top: 34px; font: 500 36px Inter; letter-spacing: -0.01em; color: rgba(255,255,255,.85); }
+</style>
+</head>
+<body>
+<div id="bg"></div>
+<div id="world">
+  <!-- project material, scattered -->
+  <div class="item" style="width:300px"><div class="tag"><span class="chip" style="background:#7c5cff">♪</span>interview_parent_03.m4a</div>
+    <div class="wave" id="wave1"></div></div>
+  <div class="sticky" style="width:210px;height:190px;background:#ffe27a">kids don't “see” digital money?</div>
+  <div class="item" style="width:250px"><div class="tag"><span class="chip" style="background:#dc2626">PDF</span>desk_research.pdf</div>
+    <div class="line" style="width:92%"></div><div class="line"></div><div class="line" style="width:70%"></div><div class="line" style="width:84%"></div></div>
+  <div class="item" style="width:270px;padding:12px"><div class="tag" style="margin:2px 6px 10px"><span class="chip" style="background:#0d9488">▣</span>prototype_v2.jpg</div>
+    <div style="height:150px;border-radius:8px;background:linear-gradient(160deg,#cfe7ff,#9fc3ea);position:relative;overflow:hidden">
+      <div style="position:absolute;left:70px;top:38px;width:120px;height:76px;border-radius:10px;background:#1f3b63;box-shadow:0 6px 0 #142a47"></div>
+      <div style="position:absolute;left:150px;top:52px;width:22px;height:22px;border-radius:50%;background:#ffcf4a"></div></div></div>
+  <div class="item" style="width:260px"><div class="tag"><span class="chip" style="background:#15803d">X</span>survey_results.xlsx</div>
+    <div class="grid" id="grid1"></div></div>
+  <div class="item" style="width:300px;background:#fbfaf7"><div class="tag"><span class="chip" style="background:#f5b301;color:#2a2550">M</span>Miro · sprint 2 board</div>
+    <div style="position:relative;height:120px">
+      <i style="position:absolute;left:4px;top:6px;width:52px;height:46px;background:#ffe27a"></i>
+      <i style="position:absolute;left:64px;top:14px;width:52px;height:46px;background:#ffb3c7"></i>
+      <i style="position:absolute;left:130px;top:2px;width:52px;height:46px;background:#a7e3ff"></i>
+      <i style="position:absolute;left:30px;top:64px;width:52px;height:46px;background:#c6f0b5"></i>
+      <i style="position:absolute;left:190px;top:58px;width:52px;height:46px;background:#ffe27a"></i>
+      <i style="position:absolute;left:110px;top:68px;width:52px;height:46px;background:#ffd59e"></i></div></div>
+  <div class="item" style="width:290px"><div class="tag"><span class="chip" style="background:#e4572e">P</span>midterm_slides.pptx</div>
+    <div style="height:130px;border-radius:6px;background:#2a2550;padding:16px;color:#fff;font:700 20px Inter">Concept direction<div class="line" style="background:rgba(255,255,255,.3);width:70%;margin-top:14px"></div><div class="line" style="background:rgba(255,255,255,.3);width:50%"></div></div></div>
+  <div class="item" style="width:240px;background:#fffdf6"><div class="tag"><span class="chip" style="background:#3b3320">✎</span>sketch_p14.png</div>
+    <svg width="204" height="120" viewBox="0 0 204 120"><path d="M10 90 C40 20, 70 110, 100 50 S160 10, 190 70" stroke="#3b3320" stroke-width="3" fill="none" stroke-linecap="round"/><rect x="60" y="30" width="60" height="40" rx="8" stroke="#3b3320" stroke-width="2.5" fill="none"/><circle cx="150" cy="88" r="16" stroke="#3b3320" stroke-width="2.5" fill="none"/></svg></div>
+  <div class="item" style="width:300px;background:#e9fbe5"><div class="tag"><span class="chip" style="background:#25a244">✆</span>team chat</div>
+    <div style="font:500 19px/1.3 Inter;color:#173b1a">“remember what that mum said about pocket money?”</div></div>
+  <div class="sticky" style="width:190px;height:170px;background:#ffb3c7">NFC?? check if it works on iOS</div>
+  <div class="item" style="width:250px"><div class="tag"><span class="chip" style="background:#2563eb">W</span>brief_triodos.docx</div>
+    <div class="line" style="width:60%;background:#c9d6f5"></div><div class="line"></div><div class="line" style="width:88%"></div><div class="line" style="width:76%"></div></div>
+  <div class="item" style="width:240px"><div class="tag"><span class="chip" style="background:#be185d">●</span>voice memo · 0:47</div>
+    <div class="wave" id="wave2"></div></div>
+  <div class="sticky" style="width:200px;height:180px;background:#a7e3ff">why did we pick the keychain again?</div>
+  <svg id="links" width="1920" height="1080"></svg>
+</div>
+<div id="dim"></div>
+<div id="wall"><div id="pages">
+  <div class="page" style="left:80px">
+    <h4><span class="chip" style="background:#7c5cff">♪</span>interview_child_02 · transcript</h4>
+    <p><span class="sp">00:41 I</span><span class="fill">So when you want something, a toy or a game, how do you get it?</span></p>
+    <p><span class="sp">00:47 C</span><span class="fill">Uhm, sometimes I save. I have a jar in my room with coins, and my grandma gives me money on my birthday, so then I put it in.</span></p>
+    <p><span class="sp">01:05 I</span><span class="fill">And when it's something from the internet?</span></p>
+    <p><span class="sp">01:09 C</span><span class="hl ev" id="h1">"I just give cash to my mom and then she orders it for me."</span> <span class="fill">She has it on her phone.</span></p>
+    <p><span class="sp">01:22 I</span><span class="fill">Do you know how much it costs then?</span></p>
+    <p><span class="sp">01:25 C</span><span class="fill">Not really. She just says if it's too much. Last time it was too much.</span></p>
+    <p><span class="sp">01:38 I</span><span class="fill">What about the money in the jar, is that different?</span></p>
+    <p><span class="sp">01:42 C</span><span class="fill">Yes because </span><span class="hl ev" id="h4">I saved it myself, so it's mine.</span><span class="fill"> I don't want to spend it on stupid things.</span></p>
+    <p><span class="sp">02:03 I</span><span class="fill">Do you ever pay with a card?</span></p>
+    <p><span class="sp">02:06 C</span><span class="fill">No. My brother has one but he is twelve. I want one with a dinosaur.</span></p>
+    <p><span class="sp">02:19 I</span><span class="fill">Where do you think the money goes when mum taps her phone?</span></p>
+    <p><span class="sp">02:24 C</span><span class="fill">To the shop? I don't know. Maybe it's in the phone.</span></p>
+  </div>
+  <div class="page" style="left:680px">
+    <h4><span class="chip" style="background:#dc2626">PDF</span>desk_research.pdf · Reddit, 121 threads</h4>
+    <p class="fill">3.2 Method. Threads from r/Parenting, r/personalfinance and r/Netherlands were collected with an Apify scraper and clustered with assistance from Claude, then coded by hand for recurring concerns.</p>
+    <p class="fill">3.3 Findings. Parents describe cash as the default teaching tool for value: counting coins, paying at the till, physically handing money over. Several parents note that card and phone payments happen “out of sight” of children.</p>
+    <p><span class="fill">The most frequent concern, across 38 threads, is that parents </span><span class="hl ev" id="h2">worry kids can't count, spend or plan once cash is gone.</span></p>
+    <p class="fill">A smaller group (11 threads) reports using prepaid kids' cards, but describes the apps as built for parents, not for children, with little that a six-year-old can follow on their own.</p>
+    <p class="fill">3.4 Limitations. Reddit skews towards English-speaking, higher-income parents; findings are indicative and should be compared with the Dutch interview data before being generalised.</p>
+    <p class="fill">3.5 Competitors. GoHenry, Gimi and Greenlight combine pocket money with lessons; none foregrounds sustainability or the impact of where money goes.</p>
+  </div>
+  <div class="page ideas" style="left:1280px">
+    <h4><span class="chip" style="background:#f5b301;color:#2a2550">✎</span>notes & ideas · sprint 1</h4>
+    <p class="scrib fill">– coins = something you can hold. tap = nothing happens??</p>
+    <p class="scrib fill">– jar metaphor for the app? jars beat percentages (test!)</p>
+    <p class="scrib"><span class="hl in" id="h3">– digital money is invisible to them</span></p>
+    <p class="scrib fill">– what does mum actually do when she “orders it”? ask parents</p>
+    <p class="scrib fill">– NFC keychain → works offline? check iOS support</p>
+    <p class="scrib"><span class="hl op" id="h5">– make it feel like THEIR money, not a lesson</span></p>
+    <p class="scrib fill">– teachers: not our job (week van het geld only)</p>
+    <p class="scrib fill">– sustainability angle: where does money GO?</p>
+    <p class="scrib fill">– grandparents give cash: keep that ritual?</p>
+  </div>
+</div><svg id="wlinks" width="1920" height="1080"></svg></div>
+<div id="board"></div>
+<div id="cards"><svg id="clinks" width="1920" height="1080"></svg></div>
+<div id="veil"></div>
+<div id="hero">
+  <div class="kick">INTRODUCING</div>
+  <div class="row">
+    <div class="mark"><svg viewBox="0 0 128 128"><path id="mk-l1" d="M34 44 L64 64 L94 46" stroke="#fff" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <path id="mk-l2" d="M64 64 L64 92" stroke="#fff" stroke-width="7" fill="none" stroke-linecap="round"/>
+      <circle class="mk-d" cx="34" cy="44" r="11" fill="#fff"/><circle class="mk-d" cx="94" cy="46" r="11" fill="#fff"/>
+      <circle class="mk-d" cx="64" cy="64" r="11" fill="#fff"/><circle class="mk-d" cx="64" cy="92" r="11" fill="#fff"/></svg></div>
+    <div class="word" id="word"></div>
+  </div>
+  <div class="tag">A reasoning board for design projects</div>
+</div>
+<div id="cap"></div>
+
+<div id="question">Have you ever had this problem?</div>
+<div id="text2"><div id="head2">The organisation lives<br/>only in your head.</div><div id="sub2">And the connections between them are hard to find.</div></div>
+<div id="text"><div id="headline">Material, scattered<br/>everywhere.</div></div>
+
+<script>
+  // deterministic waveforms / grid
+  let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (const id of ['wave1', 'wave2']) {
+    const w = document.getElementById(id);
+    for (let i = 0; i < (id === 'wave1' ? 36 : 28); i++) { const b = document.createElement('i'); b.style.height = (8 + rnd() * 44) + 'px'; if (id === 'wave2') b.style.background = '#be185d'; w.appendChild(b); }
+  }
+  const g = document.getElementById('grid1');
+  for (let i = 0; i < 24; i++) { const c = document.createElement('i'); if (i < 4 || rnd() < .2) c.className = 'h'; g.appendChild(c); }
+
+  // final resting place of each item: [x, y, rotation]
+  const targets = [
+    [150, 110, -6], [560, 60, 5], [1010, 80, -3], [1440, 120, 7], [1600, 450, -5], [70, 430, 4],
+    [1480, 760, -4], [210, 770, -8], [640, 830, 3], [1215, 790, -6], [1270, 300, 6], [420, 320, -3], [1000, 700, 4],
+  ];
+  const items = [...document.querySelectorAll('#world > :not(svg)')];
+  const W = 1920, H = 1080;
+  const clamp = (v) => Math.min(1, Math.max(0, v));
+  const easeOutBack = (t) => { const c1 = 1.25, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+  const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+  const easeInOut = (t) => t * t * (3 - 2 * t);
+
+  // Clip 2: dashed lines try to join related pieces, flicker, then break. [from, to, start time]
+  const pairs = [[0, 8, 10.9], [9, 3, 11.5], [1, 4, 12.1], [12, 7, 12.7], [5, 6, 13.3]];
+  const svg = document.getElementById('links');
+  const NS = 'http://www.w3.org/2000/svg';
+  const mk = (tag, attrs, parent = svg) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
+  const linkEls = pairs.map(() => {
+    const g = mk('g', {});
+    const q = mk('g', { class: 'q' }, g);
+    return { g, a: mk('line', {}, g), b: mk('line', {}, g), ea: mk('circle', { class: 'end', r: 9 }, g), eb: mk('circle', { class: 'end', r: 9 }, g),
+      q, qc: mk('circle', { r: 26 }, q), qt: Object.assign(mk('text', {}, q), { textContent: '?' }) };
+  });
+  const centre = [];
+
+  window.render = (t) => {
+    items.forEach((el, i) => {
+      const [tx, ty, tr] = targets[i];
+      const w = el.offsetWidth, h = el.offsetHeight;
+      // start: a tidy-ish pile in the centre
+      // the pile rises in near the bottom, under the question
+      const rise = (1 - easeOutCubic(clamp((t - 0.1) / 0.9))) * 260;
+      const sx = W / 2 - w / 2 + (i % 3 - 1) * 14, sy = H * 0.74 - h / 2 + (i % 4 - 1.5) * 10 + rise, sr = (i % 5 - 2) * 3;
+      const start = 2.5 + i * 0.07;
+      const p = clamp((t - start) / 1.15);
+      const pe = easeOutBack(p), pr = easeOutCubic(p);
+      // gentle float once landed
+      const fl = Math.min(1, Math.max(0, t - start - 0.9));
+      const fx = Math.sin(t * 0.9 + i * 1.7) * 6 * fl, fy = Math.cos(t * 0.75 + i * 2.3) * 7 * fl;
+      const x = sx + (tx - sx) * pe + fx, y = sy + (ty - sy) * pe + fy;
+      const r = sr + (tr - sr) * pr + Math.sin(t * 0.6 + i) * 0.8 * fl + (1 - pr) * (i % 2 ? 18 : -18) * Math.sin(Math.PI * p);
+      const s = (0.82 + 0.18 * pr) * 1.1;
+      el.style.transform = `translate(${x}px, ${y}px) rotate(${r}deg) scale(${s})`;
+      el.style.zIndex = i;
+      centre[i] = { x: x + w / 2, y: y + h / 2 };
+    });
+    // pile "breathes" in before the burst; slow push-in after
+    const push = 1 + 0.045 * easeInOut(clamp((t - 3.4) / 6.6)) + 0.03 * easeInOut(clamp((t - 10) / 8));
+    const world = document.getElementById('world');
+    const dive = easeInOut(clamp((t - 18.0) / 1.1));
+    if (dive > 0 && centre[0]) {
+      const S = push + (3.4 - push) * dive, c = { x: W / 2, y: H / 2 };
+      const dx = -dive * S * (centre[0].x - c.x), dy = -dive * S * (centre[0].y - c.y);
+      world.style.transform = `translate(${dx}px, ${dy}px) scale(${S})`;
+      world.style.filter = `blur(${dive * 12}px)`;
+      world.style.opacity = 1 - 0.75 * dive;
+    } else {
+      world.style.transform = `scale(${push})`;
+      world.style.filter = ''; world.style.opacity = 1;
+    }
+    // headline
+    // clip 2: lines, breaking
+    pairs.forEach(([ia, ib, st], k) => {
+      const L = linkEls[k], A = centre[ia], B = centre[ib];
+      const M = { x: (A.x + B.x) / 2 + (k % 2 ? 26 : -26), y: (A.y + B.y) / 2 + (k % 2 ? -18 : 18) };
+      const grow = easeInOut(clamp((t - st) / 0.75));            // draw from A towards B
+      const brk = easeInOut(clamp((t - st - 1.55) / 0.5));         // both halves pull back to their ends
+      const flick = t > st + 0.85 && t < st + 1.55 ? (Math.sin(t * 61 + k * 9) > 0.35 ? 0.35 : 1) : 1;
+      const pa = Math.min(1, grow * 2), pb = Math.max(0, grow * 2 - 1);
+      const ra = 1 - brk, rb = 1 - brk;
+      const lerp = (P, Q, u) => ({ x: P.x + (Q.x - P.x) * u, y: P.y + (Q.y - P.y) * u });
+      const endA = lerp(A, M, pa * ra), startB = lerp(B, M, brk > 0 ? rb : 1), endB = lerp(M, B, pb);
+      L.a.setAttribute('x1', A.x); L.a.setAttribute('y1', A.y); L.a.setAttribute('x2', endA.x); L.a.setAttribute('y2', endA.y);
+      const b1 = brk > 0 ? startB : M, b2 = brk > 0 ? B : endB;
+      L.b.setAttribute('x1', b1.x); L.b.setAttribute('y1', b1.y); L.b.setAttribute('x2', b2.x); L.b.setAttribute('y2', b2.y);
+      L.b.style.display = pb > 0 ? '' : 'none';
+      L.ea.setAttribute('cx', A.x); L.ea.setAttribute('cy', A.y); L.eb.setAttribute('cx', B.x); L.eb.setAttribute('cy', B.y);
+      L.eb.style.opacity = pb >= 1 ? 1 - brk : 0;
+      L.g.style.opacity = (t < st ? 0 : flick) * (1 - easeInOut(clamp((t - st - 1.9) / 0.3)));
+      // "?" pops at the midpoint while the link wavers, and leaves with it
+      const qs = easeOutBack(clamp((t - st - 0.8) / 0.35)) * (1 - brk);
+      L.q.setAttribute('transform', `translate(${M.x} ${M.y}) scale(${Math.max(0, qs)})`);
+    });
+    const out1 = easeInOut(clamp((t - 10.0) / 0.6));
+    const a = easeOutCubic(clamp((t - 4.2) / 0.9)) * (1 - out1);
+    const qIn = easeOutCubic(clamp((t - 0.3) / 0.8)), qOut = easeInOut(clamp((t - 2.15) / 0.5));
+    const q = document.getElementById('question');
+    q.style.opacity = qIn * (1 - qOut);
+    q.style.transform = `translateY(${(1 - qIn) * 24 - qOut * 30}px)`;
+    q.style.filter = `blur(${(1 - qIn) * 8 + qOut * 10}px)`;
+    const text = document.getElementById('text');
+    text.style.opacity = a;
+    text.style.transform = `translateY(calc(-50% + ${(1 - a) * 28}px))`;
+    text.style.filter = `blur(${(1 - a) * 8 + out1 * 4}px)`;
+    if (out1 > 0) text.style.transform = `translateY(calc(-50% - ${out1 * 30}px))`;
+    const h2 = easeOutCubic(clamp((t - 11.3) / 0.9)), s2 = easeOutCubic(clamp((t - 13.6) / 0.9));
+    const head2 = document.getElementById('head2'), sub2 = document.getElementById('sub2');
+    document.getElementById('text2').style.transform = 'translateY(-50%)';
+    const out2 = easeInOut(clamp((t - 18.0) / 0.5));
+    document.getElementById('text2').style.opacity = 1 - out2;
+    head2.style.opacity = h2; head2.style.transform = `translateY(${(1 - h2) * 28}px)`; head2.style.filter = `blur(${(1 - h2) * 8}px)`;
+    sub2.style.opacity = s2; sub2.style.transform = `translateY(${(1 - s2) * 20}px)`; sub2.style.filter = `blur(${(1 - s2) * 6}px)`;
+    document.getElementById('dim').style.opacity = easeOutCubic(clamp((t - 3.9) / 1.2)) * (1 - easeInOut(clamp((t - 18.0) / 0.8)));
+    renderWall(t);
+    renderCards(t);
+    renderHero(t);
+    renderMorph(t);
+    document.getElementById('bg').style.transform = `scale(${1 + 0.02 * t / 10})`;
+  };
+
+  // ---------- clip 2b: wall of text, highlights, connections ----------
+  const wallEl = document.getElementById('wall'), pagesEl = document.getElementById('pages');
+  const wsvg = document.getElementById('wlinks'), cap = document.getElementById('cap');
+  const wl = [['h1', 'h2', 20.75], ['h2', 'h3', 21.25], ['h4', 'h5', 22.35]].map(([a, b, st]) => {
+    const path = mk('path', {}, wsvg), ca = mk('circle', { r: 8 }, wsvg), cb = mk('circle', { r: 8 }, wsvg);
+    return { a, b, st, path, ca, cb };
+  });
+  const hlTimes = { h1: 20.3, h2: 20.75, h3: 21.25, h4: 21.95, h5: 22.35 };
+  const captions = [[19.3, 22.7, 'Hours of interviews, desk research and ideas.'], [22.85, 25.0, 'Distilling it, and finding what connects, is the hard part.'], [32.4, 99, 'Corkline puts it on one board, and makes the reasoning visible.']];
+  function renderWall(t) {
+    const show = easeOutCubic(clamp((t - 18.55) / 0.85));
+    const leave = easeInOut(clamp((t - 28.15) / 0.9));
+    wallEl.style.opacity = show * (1 - leave);
+    wsvg.style.opacity = 1 - easeInOut(clamp((t - 25.0) / 0.35));
+    wallEl.style.transform = `scale(${0.35 + 0.65 * show})`;
+    wallEl.style.filter = `blur(${(1 - show) * 10 + leave * 8}px)`;
+    if (show <= 0 || leave >= 1) { if (show <= 0) cap.style.opacity = 0; }
+    if (show <= 0) return;
+    pagesEl.style.transform = `translateY(${70 - 150 * easeInOut(clamp((t - 18.6) / 6.4))}px)`;
+    // the rest of the text fades back so the highlights stand out
+    const fade = easeInOut(clamp((t - 20.0) / 0.7)), fade2 = easeInOut(clamp((t - 23.0) / 1.2));
+    const g = Math.round(43 + (205 - 43) * fade + (232 - 205) * fade2);
+    document.querySelectorAll('#pages .fill, #pages .sp').forEach((e) => { e.style.color = `rgb(${g},${g - 4},${g + 14})`; });
+    for (const [id, st] of Object.entries(hlTimes)) {
+      const p = easeOutCubic(clamp((t - st) / 0.4));
+      document.getElementById(id).style.backgroundSize = `${p * 100}% 100%`;
+    }
+    for (const L of wl) {
+      const A = document.getElementById(L.a).getBoundingClientRect(), B = document.getElementById(L.b).getBoundingClientRect();
+      const ws = 0.35 + 0.65 * show; // undo the wall's own scale: the svg lives inside it
+      const tf = (x, y) => ({ x: (x - W / 2) / ws + W / 2, y: (y - H / 2) / ws + H / 2 });
+      let pa, pb, d;
+      if (L.a === 'h4') { // same-page-to-far-page: arc over the top of the middle column
+        pa = tf(A.right, A.top + A.height / 2); pb = tf(B.left, B.top + B.height / 2);
+        d = `M ${pa.x} ${pa.y} C ${pa.x + 260} ${pa.y + 120}, ${pb.x - 260} ${pb.y + 120}, ${pb.x} ${pb.y}`;
+      } else {
+        pa = tf(A.right, A.top + A.height / 2); pb = tf(B.left, B.top + B.height / 2);
+        d = `M ${pa.x} ${pa.y} C ${pa.x + 120} ${pa.y}, ${pb.x - 120} ${pb.y}, ${pb.x} ${pb.y}`;
+      }
+      L.path.setAttribute('d', d);
+      const len = L.path.getTotalLength(), p = easeInOut(clamp((t - L.st) / 0.5));
+      L.path.style.strokeDasharray = `${len}`; L.path.style.strokeDashoffset = `${len * (1 - p)}`;
+      L.path.style.opacity = p > 0 ? 1 : 0;
+      L.ca.setAttribute('cx', pa.x); L.ca.setAttribute('cy', pa.y); L.ca.style.opacity = p > 0 ? 1 : 0;
+      L.cb.setAttribute('cx', pb.x); L.cb.setAttribute('cy', pb.y); L.cb.style.opacity = p >= 1 ? 1 : 0;
+    }
+    const c = captions.find(([a, b]) => t >= a - 0.01 && t < b + 0.3);
+    if (c) {
+      cap.textContent = c[2];
+      const cin = easeOutCubic(clamp((t - c[0]) / 0.45)), cout = easeInOut(clamp((t - c[1]) / 0.3));
+      cap.style.opacity = cin * (1 - cout);
+      cap.style.transform = `translateX(-50%) translateY(${(1 - cin) * 18}px)`;
+    } else cap.style.opacity = 0;
+  }
+
+  // ---------- clip 3: highlights become typed cards on a Corkline board ----------
+  const TYPES = {
+    ev: { code: 'EVID', color: '#0d9488', tint: '#e3f3f1', marker: [153, 246, 228] },
+    in: { code: 'INS', color: '#7c3aed', tint: '#efe9fd', marker: [221, 214, 254] },
+    op: { code: 'OPP', color: '#b45309', tint: '#fbeee0', marker: [254, 215, 170] },
+  };
+  const COLX = { ev: 300, in: 810, op: 1320 }, CW = 320;
+  const cardDefs = [
+    { id: 'h1', type: 'ev', y: 250, title: '“I just give cash to my mom”', st: 28.10 },
+    { id: 'h2', type: 'ev', y: 450, title: 'Parents worry kids can’t plan once cash is gone', st: 28.16 },
+    { id: 'h4', type: 'ev', y: 690, title: '“I saved it myself, so it’s mine”', st: 28.22 },
+    { id: 'h3', type: 'in', y: 330, title: 'Digital money is invisible to kids', st: 28.13 },
+    { id: null, type: 'in', y: 640, title: 'Ownership drives engagement', st: 29.90 },
+    { id: 'h5', type: 'op', y: 480, title: 'Make it feel like their own money, not a lesson', st: 28.19 },
+  ];
+  const cardsEl = document.getElementById('cards'), csvg = document.getElementById('clinks');
+  for (const [k, label] of [['ev', 'EVIDENCE'], ['in', 'INSIGHT'], ['op', 'OPPORTUNITY']]) {
+    const d = document.createElement('div'); d.className = 'lane'; d.textContent = label;
+    d.style.left = COLX[k] + 'px'; d.style.color = TYPES[k].color; d.dataset.lane = '1'; cardsEl.appendChild(d);
+  }
+  for (const c of cardDefs) {
+    const T = TYPES[c.type], el = document.createElement('div');
+    el.className = 'cc';
+    const src = c.id ? document.getElementById(c.id).textContent.replace(/^–\s*/, '') : c.title;
+    el.innerHTML = `<div class="hd" style="color:${T.color};background:${T.tint}"><i style="background:${T.color}"></i>${T.code}</div>
+      <div class="tt"><span class="a">${src}</span><span class="b">${c.title}</span></div>
+      <div class="dot" style="color:${T.color};border-color:${T.color}"></div>`;
+    cardsEl.appendChild(el);
+    Object.assign(c, { el, hd: el.querySelector('.hd'), tt: el.querySelector('.tt'), a: el.querySelector('.a'), b: el.querySelector('.b'), dot: el.querySelector('.dot') });
+  }
+  const KINDS = { supports: ['#15803d', 'SUPPORTS'], leads: ['#64748b', 'LEADS TO'] };
+  const linkDefs = [[0, 3, 'supports', 30.35], [1, 3, 'supports', 30.7], [2, 4, 'supports', 31.05], [3, 5, 'leads', 31.4], [4, 5, 'leads', 31.75]]
+    .map(([a, b, kind, st]) => {
+      const path = mk('path', { stroke: KINDS[kind][0] }, csvg);
+      const lab = document.createElement('div'); lab.className = 'elabel'; lab.textContent = KINDS[kind][1];
+      lab.style.color = KINDS[kind][0]; lab.style.borderColor = KINDS[kind][0]; cardsEl.appendChild(lab);
+      return { a, b, st, path, lab };
+    });
+  const mixc = (m, t) => `rgb(${Math.round(m[0] + (255 - m[0]) * t)},${Math.round(m[1] + (255 - m[1]) * t)},${Math.round(m[2] + (255 - m[2]) * t)})`;
+
+  function renderCards(t) {
+    const on = t >= 28;
+    cardsEl.style.display = on ? '' : 'none';
+    const board = document.getElementById('board');
+    const bIn = easeOutCubic(clamp((t - 28.3) / 0.9));
+    board.style.opacity = bIn; board.style.transform = `scale(${0.94 + 0.06 * bIn})`;
+    if (!on) return;
+    const push3 = 1 + 0.035 * easeInOut(clamp((t - 30) / 6));
+    cardsEl.style.transform = `scale(${push3})`; board.style.transform += ` scale(${push3})`;
+    const lanes = easeOutCubic(clamp((t - 29.5) / 0.6));
+    cardsEl.querySelectorAll('[data-lane]').forEach((d) => { d.style.opacity = lanes; });
+    for (const c of cardDefs) {
+      const T = TYPES[c.type];
+      const p = easeInOut(clamp((t - c.st) / 1.15));
+      let x, y, w, from;
+      if (c.id) {
+        const r = document.getElementById(c.id).getBoundingClientRect();
+        from = { x: r.left, y: r.top, w: Math.max(r.width, 120) };
+        // undo the cards layer's own scale so the first frame sits exactly on the highlight
+        const inv = (v, cc) => (v - cc) / push3 + cc;
+        from = { x: inv(from.x, W / 2), y: inv(from.y, H / 2), w: from.w / push3 };
+      } else from = { x: COLX[c.type] + 40, y: c.y + 20, w: CW - 80 };
+      x = from.x + (COLX[c.type] - from.x) * p; y = from.y + (c.y - from.y) * p; w = from.w + (CW - from.w) * p;
+      const el = c.el;
+      el.style.left = x + 'px'; el.style.top = y + 'px'; el.style.width = w + 'px';
+      el.style.opacity = c.id ? (t >= c.st ? 1 : 0) : easeOutCubic(clamp((t - c.st) / 0.4));
+      if (!c.id) el.style.transform = `scale(${0.8 + 0.2 * easeOutBack(clamp((t - c.st) / 0.5))})`;
+      el.style.background = c.id ? mixc(T.marker, p) : '#fff';
+      el.style.boxShadow = `0 ${10 * p + 2}px ${26 * p}px rgba(30,20,60,${0.16 * p + (c.id ? 0 : 0.16)}), 0 0 0 ${1.5 * p}px rgba(30,20,60,.08)`;
+      const hp = c.id ? p : 1;
+      c.hd.style.height = 40 * hp + 'px'; c.hd.style.opacity = hp;
+      c.tt.style.padding = `${14 * hp + 1}px ${18 * hp + 4}px ${18 * hp + 1}px`;
+      c.tt.style.font = `${c.id ? Math.round(600) : 600} ${21 - 0.5 * hp}px/1.35 Inter`;
+      c.tt.style.color = '#1d1a2e';
+      const swap = c.id ? easeInOut(clamp((p - 0.35) / 0.3)) : 1;
+      c.a.style.opacity = 1 - swap; c.b.style.opacity = swap;
+      c.a.style.visibility = swap >= 1 ? 'hidden' : 'visible';
+      // keep layout height from whichever text is showing
+      c.a.style.position = swap < 0.5 ? 'relative' : 'absolute'; c.b.style.position = swap < 0.5 ? 'absolute' : 'relative';
+      c.dot.style.opacity = easeOutCubic(clamp((t - c.st - 1.0) / 0.4));
+      c.rect = { x, y, w, h: el.offsetHeight };
+      if (c.id) document.getElementById(c.id).style.opacity = t >= c.st ? 0 : 1;
+    }
+    for (const L of linkDefs) {
+      const A = cardDefs[L.a].rect, B = cardDefs[L.b].rect;
+      const pa = { x: A.x + A.w + 13, y: A.y + A.h / 2 }, pb = { x: B.x - 2, y: B.y + B.h / 2 };
+      const dx = (pb.x - pa.x) * 0.45;
+      L.path.setAttribute('d', `M ${pa.x} ${pa.y} C ${pa.x + dx} ${pa.y}, ${pb.x - dx} ${pb.y}, ${pb.x} ${pb.y}`);
+      const len = L.path.getTotalLength(), p = easeInOut(clamp((t - L.st) / 0.5));
+      L.path.style.strokeDasharray = p >= 1 ? '12 9' : `${len * p} ${len}`;
+      L.path.style.opacity = p > 0 ? 1 : 0;
+      const mid = L.path.getPointAtLength(len / 2), lp = easeOutBack(clamp((t - L.st - 0.4) / 0.35));
+      L.lab.style.opacity = clamp(lp);
+      L.lab.style.transform = `translate(${mid.x}px, ${mid.y}px) translate(-50%, -50%) scale(${0.6 + 0.4 * lp})`;
+    }
+  }
+
+  // ---------- hero: Introducing Corkline (25–28 s) ----------
+  const wordEl = document.getElementById('word');
+  const letters = 'CORKLINE'.split('').map((ch) => { const sp = document.createElement('span'); sp.textContent = ch; wordEl.appendChild(sp); return sp; });
+  const heroEl = document.getElementById('hero'), veil = document.getElementById('veil');
+  const kick = heroEl.querySelector('.kick'), tag = heroEl.querySelector('.tag'), mark = heroEl.querySelector('.mark');
+  const mkL = ['mk-l1', 'mk-l2'].map((id) => document.getElementById(id)), mkD = [...heroEl.querySelectorAll('.mk-d')];
+  function renderHero(t) {
+    const vin = easeOutCubic(clamp((t - 25.0) / 0.5)), vout = easeInOut(clamp((t - 27.35) / 0.6));
+    const v = vin * (1 - vout);
+    veil.style.opacity = v;
+    heroEl.style.opacity = t >= 25 && t < 28 ? 1 : 0;
+    if (t < 25 || t >= 28) return;
+    const out = easeInOut(clamp((t - 27.3) / 0.55));
+    heroEl.style.transform = `translateY(${-40 * out}px) scale(${1 - 0.06 * out})`;
+    heroEl.style.filter = `blur(${out * 10}px)`;
+    heroEl.style.opacity = 1 - out;
+    const k = easeOutCubic(clamp((t - 25.25) / 0.5));
+    kick.style.opacity = k; kick.style.transform = `translateY(${(1 - k) * 16}px)`; kick.style.letterSpacing = `${0.7 - 0.25 * k}em`;
+    const m = easeOutBack(clamp((t - 25.4) / 0.55));
+    mark.style.transform = `scale(${Math.max(0, m)}) rotate(${(1 - clamp(m)) * -25}deg)`;
+    mkD.forEach((d, i) => { d.style.opacity = clamp((t - 25.65 - i * 0.06) / 0.15); });
+    mkL.forEach((l, i) => { const len = l.getTotalLength(), q = easeInOut(clamp((t - 25.8 - i * 0.12) / 0.3));
+      l.style.strokeDasharray = len; l.style.strokeDashoffset = len * (1 - q); });
+    letters.forEach((sp, i) => {
+      const q = easeOutBack(clamp((t - 25.5 - i * 0.045) / 0.45));
+      sp.style.opacity = clamp((t - 25.5 - i * 0.045) / 0.2);
+      sp.style.transform = `translateY(${(1 - q) * 60}px)`;
+    });
+    const g = easeOutCubic(clamp((t - 26.2) / 0.5));
+    tag.style.opacity = g; tag.style.transform = `translateY(${(1 - g) * 14}px)`;
+  }
+
+  // ---------- 36–36.6 s: the illustrated board becomes the app window of the demo footage ----------
+  // Demo footage frames the app at 96,54 → 1824,1026 (1080p) with an 18px corner radius.
+  function renderMorph(t) {
+    if (t < 36) return;
+    const m = easeInOut(clamp((t - 36) / 0.6));
+    const board = document.getElementById('board');
+    const push3 = 1.035;
+    const L = (a, b) => a + (b - a) * m;
+    board.style.left = L(90, 96) + 'px'; board.style.right = L(90, 96) + 'px';
+    board.style.top = L(64, 54) + 'px'; board.style.bottom = L(64, 54) + 'px';
+    board.style.borderRadius = L(26, 18) + 'px';
+    board.style.transform = `scale(${L(push3, 1)})`;
+    board.style.backgroundColor = `rgb(${Math.round(L(247, 250))},${Math.round(L(246, 250))},${Math.round(L(242, 249))})`;
+    board.style.backgroundImage = `radial-gradient(rgba(217,214,207,${1 - m}) 1.6px, transparent 1.7px)`;
+    cardsEl.style.opacity = 1 - easeInOut(clamp((t - 36) / 0.35));
+    cap.style.opacity = (1 - easeInOut(clamp((t - 36) / 0.3)));
+  }
+  window.render(0);
+</script>
+</body>
+</html>

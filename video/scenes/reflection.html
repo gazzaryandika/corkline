@@ -1,0 +1,309 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  /* Reflection, 35 s (timed to the voiceover): starts on the demo's last frame, then four beats. Rendered per frame via window.render(t). */
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; font-family: Inter, sans-serif; color: #fff; }
+  #bg { position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 25% 20%, rgba(255,255,255,.18), rgba(255,255,255,0) 60%),
+      linear-gradient(135deg, #2a2550 0%, #4b3a86 55%, #c9875f 100%); }
+  #demo { position: absolute; inset: 0; background: url(../assembly/d09-last.png) center / cover; transform-origin: 50% 50%;
+    box-shadow: 0 40px 100px rgba(10,5,30,.6); }
+  .beat { position: absolute; inset: 0; opacity: 0; }
+  .kick { font: 600 22px 'IBM Plex Mono', monospace; letter-spacing: .32em; color: #ffcf9e; margin-bottom: 22px; }
+  .head { font: 800 76px/1.04 Inter; letter-spacing: -0.035em; text-shadow: 0 6px 30px rgba(10,5,30,.45); }
+  .sub { margin-top: 24px; font: 500 30px/1.3 Inter; letter-spacing: -0.01em; color: rgba(255,255,255,.82); max-width: 760px; }
+  .left { position: absolute; left: 170px; top: 50%; width: 820px; transform: translateY(-50%); }
+  .hl { color: #ffd9b3; }
+
+  /* beat 1: what worked */
+  .card { position: absolute; width: 380px; background: #fff; border-radius: 16px; color: #1f1c2e;
+    box-shadow: 0 24px 60px rgba(10,5,30,.45); overflow: hidden; }
+  .card .bar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; font: 700 14px 'IBM Plex Mono', monospace;
+    letter-spacing: .08em; color: #0d9488; background: #e6f6f4; }
+  .card .bar i { width: 9px; height: 9px; border-radius: 50%; background: #0d9488; }
+  .card .t { padding: 14px 18px 18px; font: 700 25px/1.25 Inter; letter-spacing: -0.01em; }
+  .quote { position: absolute; width: 400px; padding: 18px 20px; border-radius: 14px; background: #fffbea; color: #3b3320;
+    font: italic 500 21px/1.4 Inter; box-shadow: 0 18px 40px rgba(10,5,30,.35); }
+  .quote b { display: block; font: 600 14px 'IBM Plex Mono', monospace; font-style: normal; letter-spacing: .06em; color: #8a7d55; margin-bottom: 8px; }
+  .quote mark { background: #99f6e4; color: inherit; border-radius: 4px; padding: 0 3px; }
+  #clip { position: absolute; left: 0; top: 0; overflow: visible; }
+  #count { position: absolute; display: flex; align-items: baseline; gap: 18px; }
+  #count .n { font: 800 140px/1 Inter; letter-spacing: -0.05em; color: #ffcf9e; text-shadow: 0 8px 30px rgba(10,5,30,.45); min-width: 160px; text-align: right; }
+  #count .l { font: 600 26px/1.25 Inter; color: #fff; width: 280px; }
+
+  /* beat 2: limits */
+  #chain { position: absolute; left: 0; top: 0; overflow: visible; }
+  .chip { position: absolute; padding: 12px 20px; border-radius: 999px; background: rgba(255,255,255,.14);
+    border: 1.5px solid rgba(255,255,255,.35); font: 600 24px Inter; white-space: nowrap; backdrop-filter: blur(2px); }
+  .chip b { color: #ffcf9e; }
+
+  /* beat 3: garbage in, garbage out */
+  #chart { position: absolute; left: 0; top: 0; overflow: visible; }
+  #gigo-head { position: absolute; left: 0; right: 0; top: 150px; text-align: center; }
+  #gigo-head .head { font-size: 96px; }
+  #machine { position: absolute; left: 50%; top: 610px; width: 230px; height: 150px; margin-left: -115px; border-radius: 30px;
+    background: linear-gradient(135deg, #0d9488, #7c3aed); display: grid; place-items: center;
+    font: 800 64px 'IBM Plex Mono', monospace; letter-spacing: .04em; box-shadow: 0 24px 60px rgba(10,5,30,.5), inset 0 2px 0 rgba(255,255,255,.25); }
+  .junk { position: absolute; width: 64px; height: 50px; border-radius: 9px; background: #d9d4c7; box-shadow: 0 8px 18px rgba(10,5,30,.35); }
+  .junk::before, .junk::after { content: ''; position: absolute; left: 10px; right: 14px; height: 6px; border-radius: 3px; background: #a39d8c; top: 14px; }
+  .junk::after { top: 28px; right: 24px; }
+  #gigo-sub { position: absolute; left: 0; right: 0; top: 860px; text-align: center; font: 500 32px Inter; color: rgba(255,255,255,.85); }
+
+  /* beat 4: closing */
+  #close { position: absolute; left: 0; right: 0; top: 330px; text-align: center; }
+  #close .head { font-size: 84px; line-height: 1.08; }
+  #not { position: relative; color: #ffcf9e; display: inline-block; }
+  #not i { position: absolute; left: 0; right: 0; bottom: 4px; height: 8px; border-radius: 4px; background: #ffcf9e; transform-origin: left; }
+  #sign { position: absolute; left: 0; right: 0; top: 720px; display: grid; justify-items: center; gap: 22px; }
+  #sign .row { display: flex; align-items: center; gap: 22px; }
+  #sign .mark { width: 64px; height: 64px; border-radius: 16px; background: linear-gradient(135deg, #0d9488, #7c3aed); position: relative;
+    box-shadow: 0 12px 30px rgba(10,5,30,.45), inset 0 2px 0 rgba(255,255,255,.25); }
+  #sign .mark svg { position: absolute; inset: 0; }
+  #sign .word { font: 700 64px/1 'IBM Plex Mono', monospace; letter-spacing: .02em; }
+  #sign .names { font: 600 24px Inter; color: rgba(255,255,255,.85); display: flex; gap: 18px; align-items: center; }
+  #sign .names i { width: 6px; height: 6px; border-radius: 50%; background: #ffcf9e; }
+</style>
+</head>
+<body>
+<div id="bg"></div>
+
+<!-- beat 0: the goal -->
+<div class="beat" id="b0">
+  <div class="left">
+    <div class="kick">THE GOAL</div>
+    <div class="head">Make design reasoning<br/><span class="hl">visible.</span></div>
+    <div class="sub" id="ask" style="font-size:40px; font-weight:700; color:#fff">Does Corkline do that?</div>
+  </div>
+  <svg id="trace" width="1920" height="1080"><path id="tracepath" d="M 1130 530 L 1790 530" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="4" stroke-dasharray="10 9" stroke-linecap="round"/>
+    <path id="tracelit" d="M 1130 530 L 1790 530" fill="none" stroke="#ffcf9e" stroke-width="6" stroke-linecap="round" pathLength="1" stroke-dasharray="1 1"/>
+    <g id="tdots"></g><g id="tlabels"></g><circle id="tpulse" r="14" fill="#ffcf9e"/></svg>
+</div>
+
+<!-- beat 1 -->
+<div class="beat" id="b1">
+  <div class="left">
+    <div class="kick">WHAT WORKED</div>
+    <div class="head">A small AI role,<br/><span class="hl">easy to check.</span></div>
+    <div class="sub">Every card traces back to the quote it came from.</div>
+  </div>
+  <svg id="clip" width="1920" height="1080"><path id="clipline" d="" fill="none" stroke="#fff" stroke-width="3" stroke-dasharray="8 8" stroke-linecap="round"/></svg>
+  <div class="card" id="c1" style="left:1180px; top:250px"><div class="bar"><i></i>EVIDENCE</div><div class="t">“I just give cash to my mom”</div></div>
+  <div class="quote" id="q1" style="left:1260px; top:470px"><b>INTERVIEW TRANSCRIPT</b>“… <mark>I just give cash to my mom</mark> …”</div>
+  <div id="count" style="left:1080px; top:720px"><div class="n">0</div><div class="l">links that skipped a step, on a board we thought was finished</div></div>
+</div>
+
+<!-- beat 2 -->
+<div class="beat" id="b2">
+  <div class="left">
+    <div class="kick">LIMITS</div>
+    <div class="head">Real projects<br/><span class="hl">loop back.</span></div>
+    <div class="sub">Corkline assumes a straight line, from problem to prototype.</div>
+  </div>
+  <svg id="chain" width="1920" height="1080"><path id="chainpath" d="" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="4" stroke-dasharray="10 9" stroke-linecap="round"/><g id="dots"></g></svg>
+  <div class="chip" id="t1"><b>2</b> projects tested</div>
+  <div class="chip" id="t2">Only by <b>ourselves</b></div>
+  <div class="chip" id="t3">Anonymise interviews <b>before upload</b></div>
+</div>
+
+<!-- beat 3 -->
+<div class="beat" id="b3">
+  <div id="gigo-head">
+    <div class="kick" id="g-kick">BUILDING WITH AI</div>
+    <div class="head" id="g1">AI has grown <span class="hl">immensely</span>,<br/>even in the last few months.</div>
+  </div>
+  <svg id="chart" width="1920" height="1080">
+    <defs><linearGradient id="cg" x1="0" x2="1"><stop offset="0" stop-color="#ffcf9e" stop-opacity=".5"/><stop offset="1" stop-color="#ffcf9e"/></linearGradient>
+      <filter id="glow"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+    <path id="axis" d="M 560 900 L 1360 900 M 560 900 L 560 560" stroke="rgba(255,255,255,.35)" stroke-width="3" fill="none"/>
+    <path id="curve" d="" stroke="url(#cg)" stroke-width="8" fill="none" stroke-linecap="round" filter="url(#glow)"/>
+    <circle id="tip" r="12" fill="#ffcf9e" filter="url(#glow)"/>
+  </svg>
+  <div id="gigo2" style="position:absolute; inset:0; opacity:0">
+    <div style="position:absolute; left:0; right:0; top:150px; text-align:center">
+      <div class="kick">BUT STILL</div>
+      <div class="head" style="font-size:104px">Garbage in, <span class="hl">garbage out.</span></div>
+    </div>
+    <div id="machine">AI</div>
+    <div id="junk"></div>
+    <div id="gigo-sub">The hard part moved: from writing code, to saying exactly what you want.</div>
+  </div>
+</div>
+
+<!-- beat 4 -->
+<div class="beat" id="b4">
+  <div id="close">
+    <div class="kick">LOOKING BACK</div>
+    <div class="head">Our most useful decisions were about<br/>what the AI should <span id="not">not<i></i></span> do.</div>
+  </div>
+  <div id="sign">
+    <div class="row">
+      <div class="mark"><svg viewBox="0 0 128 128"><path d="M34 44 L64 64 L94 46" stroke="#fff" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M64 64 L64 92" stroke="#fff" stroke-width="8" fill="none" stroke-linecap="round"/>
+        <circle cx="34" cy="44" r="12" fill="#fff"/><circle cx="94" cy="46" r="12" fill="#fff"/>
+        <circle cx="64" cy="64" r="12" fill="#fff"/><circle cx="64" cy="92" r="12" fill="#fff"/></svg></div>
+      <div class="word">CORKLINE</div>
+    </div>
+    <div class="names">Nienke van Dok<i></i>Gazza Ryandika Aditya Putra<i></i>Ayan Barua</div>
+  </div>
+</div>
+
+<div id="demo"></div>
+
+<script>
+  const clamp = (v) => Math.min(1, Math.max(0, v));
+  const out3 = (u) => 1 - Math.pow(1 - u, 3);
+  const io = (u) => u * u * (3 - 2 * u);
+  const back = (u) => { const c = 1.6; return 1 + (c + 1) * Math.pow(u - 1, 3) + c * Math.pow(u - 1, 2); };
+  const $ = (id) => document.getElementById(id);
+  // a beat's visibility: in over 0.45 s from a, out over 0.4 s before b
+  const vis = (t, a, b) => clamp((t - a) / 0.45) * (1 - clamp((t - (b - 0.4)) / 0.4));
+  // stagger an element in: rises and fades
+  const rise = (el, t, a, dy = 18) => { const u = out3(clamp((t - a) / 0.5)); el.style.opacity = u; el.style.transform = `translateY(${(1 - u) * dy}px)`; return u; };
+  const B = { b0: [0.75, 8.2], b1: [8.2, 14.8], b2: [14.8, 21.6], b3: [21.6, 29.9], b4: [29.9, 99] }; // beat starts follow the voice takes
+
+  // ---- opening: the demo's last frame shrinks away into the gradient (0–1.1 s)
+  function renderDemo(t) {
+    const u = io(clamp(t / 1.1));
+    const el = $('demo');
+    el.style.transform = `translateY(${u * 60}px) scale(${1 - 0.55 * u})`;
+    el.style.borderRadius = `${u * 40}px`;
+    el.style.opacity = 1 - clamp((t - 0.55) / 0.5);
+    el.style.filter = `blur(${u * 6}px)`;
+  }
+
+  // ---- beat 0: the goal; a Problem → Prototype chain lights up step by step
+  const LABELS = ['PROBLEM', 'ASSUMPTION', 'EVIDENCE', 'INSIGHT', 'OPPORTUNITY', 'DIRECTION', 'PROTOTYPE'];
+  const COLORS = ['#dc2626', '#2563eb', '#0d9488', '#7c3aed', '#b45309', '#15803d', '#be185d'];
+  const NS = 'http://www.w3.org/2000/svg';
+  const tdots = COLORS.map((c, i) => { const e = document.createElementNS(NS, 'circle'); e.setAttribute('cx', 1130 + i * 110); e.setAttribute('cy', 530); e.setAttribute('fill', c); e.setAttribute('stroke', '#fff'); e.setAttribute('stroke-width', 5); $('tdots').appendChild(e); return e; });
+  const tlabels = LABELS.map((l, i) => { const e = document.createElementNS(NS, 'text'); e.textContent = l; e.setAttribute('x', 1130 + i * 110); e.setAttribute('y', i % 2 ? 600 : 480); e.setAttribute('text-anchor', 'middle');
+    e.setAttribute('style', "font: 600 15px 'IBM Plex Mono', monospace; letter-spacing: .12em; fill: rgba(255,255,255,.85)"); $('tlabels').appendChild(e); return e; });
+  function renderB0(t) {
+    const [a, b] = B.b0;
+    $('b0').style.opacity = vis(t, a, b);
+    const left = $('b0').querySelector('.left').children;
+    rise(left[0], t, a); rise(left[1], t, a + 0.15); rise(left[2], t, a + 3.0, 22);
+    const p = io(clamp((t - (a + 0.9)) / 2.0)); // the trace runs left to right
+    $('tracelit').setAttribute('stroke-dashoffset', 1 - p);
+    const x = 1130 + 660 * p;
+    $('tpulse').setAttribute('cx', x); $('tpulse').setAttribute('cy', 530);
+    $('tpulse').style.opacity = p > 0 && p < 1 ? 1 : 0;
+    tdots.forEach((d, i) => {
+      const u = back(clamp((t - (a + 0.2 + i * 0.06)) / 0.4)), lit = clamp((x - (1130 + i * 110) + 10) / 20);
+      d.setAttribute('r', Math.max(0, 16 * u + 6 * lit));
+      d.style.opacity = 0.45 + 0.55 * lit;
+      tlabels[i].style.opacity = clamp((t - (a + 0.3 + i * 0.06)) / 0.3) * (0.4 + 0.6 * lit);
+    });
+  }
+
+  // ---- beat 1
+  function renderB1(t) {
+    const [a, b] = B.b1;
+    $('b1').style.opacity = vis(t, a, b);
+    const left = $('b1').querySelector('.left').children;
+    rise(left[0], t, a); rise(left[1], t, a + 0.15); rise(left[2], t, a + 0.6);
+    const c = $('c1'), q = $('q1');
+    const uc = back(clamp((t - (a + 0.3)) / 0.5)); c.style.opacity = clamp((t - (a + 0.3)) / 0.25); c.style.transform = `scale(${0.85 + 0.15 * uc}) rotate(-2deg)`;
+    const uq = back(clamp((t - (a + 0.9)) / 0.5)); q.style.opacity = clamp((t - (a + 0.9)) / 0.25); q.style.transform = `scale(${0.85 + 0.15 * uq}) rotate(1.5deg)`;
+    // the dashed "clip" from card to quote draws on
+    const d = clamp((t - (a + 1.1)) / 0.4);
+    const p = $('clipline'); p.setAttribute('d', 'M 1300 365 C 1300 420, 1330 440, 1340 472');
+    p.style.opacity = d; p.setAttribute('stroke-dashoffset', 0);
+    // counter 0 → 12
+    const k = $('count'); const uk = rise(k, t, a + 1.7);
+    k.querySelector('.n').textContent = Math.round(12 * out3(clamp((t - (a + 1.8)) / 1.1)));
+  }
+
+  // ---- beat 2: a straight chain of the seven card types curls into a loop
+  const TYPES = ['#dc2626', '#2563eb', '#0d9488', '#7c3aed', '#b45309', '#15803d', '#be185d'];
+  const dotsG = $('dots');
+  const dots = TYPES.map((c) => { const e = document.createElementNS('http://www.w3.org/2000/svg', 'circle'); e.setAttribute('r', 20); e.setAttribute('fill', c); e.setAttribute('stroke', '#fff'); e.setAttribute('stroke-width', 5); dotsG.appendChild(e); return e; });
+  const straight = (i) => ({ x: 1060 + i * 115, y: 420 });
+  const loop = (i) => { // forward, then curling back over itself
+    const s = i / 6, ang = -Math.PI / 2 + s * Math.PI * 1.75;
+    return { x: 1430 + Math.cos(ang) * 230 * (1 - 0.15 * s) + (1 - s) * -160, y: 470 + Math.sin(ang) * 190 };
+  };
+  const smoothPath = (pts) => {
+    let d = `M ${pts[0].x} ${pts[0].y}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+      d += ` C ${p1.x + (p2.x - p0.x) / 6} ${p1.y + (p2.y - p0.y) / 6}, ${p2.x - (p3.x - p1.x) / 6} ${p2.y - (p3.y - p1.y) / 6}, ${p2.x} ${p2.y}`;
+    }
+    return d;
+  };
+  function renderB2(t) {
+    const [a, b] = B.b2;
+    $('b2').style.opacity = vis(t, a, b);
+    const left = $('b2').querySelector('.left').children;
+    rise(left[0], t, a); rise(left[1], t, a + 0.15); rise(left[2], t, a + 0.5);
+    const m = io(clamp((t - (a + 1.0)) / 1.3));
+    const pts = TYPES.map((_, i) => { const s = straight(i), l = loop(i); return { x: s.x + (l.x - s.x) * m, y: s.y + (l.y - s.y) * m }; });
+    pts.forEach((p, i) => {
+      const u = back(clamp((t - (a + 0.2 + i * 0.07)) / 0.4));
+      dots[i].setAttribute('cx', p.x); dots[i].setAttribute('cy', p.y); dots[i].setAttribute('r', 20 * Math.max(0, u));
+    });
+    const path = $('chainpath'); path.setAttribute('d', smoothPath(pts)); path.style.opacity = clamp((t - (a + 0.5)) / 0.3);
+    path.setAttribute('stroke-dashoffset', -t * 40);
+    const chips = [['t1', 1080, 760, 2.3], ['t2', 1330, 830, 2.6], ['t3', 1100, 900, 2.9]];
+    for (const [id, x, y, d] of chips) { const e = $(id); const u = back(clamp((t - (a + d)) / 0.45)); e.style.left = x + 'px'; e.style.top = y + 'px'; e.style.opacity = clamp((t - (a + d)) / 0.2); e.style.transform = `scale(${0.7 + 0.3 * u})`; }
+  }
+
+  // ---- beat 3: the growth curve, then garbage in, garbage out
+  const junk = [];
+  for (let i = 0; i < 14; i++) { const e = document.createElement('div'); e.className = 'junk'; $('junk').appendChild(e); junk.push(e); }
+  const rnd = (i, k) => { const x = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return x - Math.floor(x); };
+  function renderB3(t) {
+    const [a, b] = B.b3;
+    $('b3').style.opacity = vis(t, a, b);
+    // part A (growth): a ≤ t < a + 2.8
+    const A = 1 - clamp((t - (a + 3.6)) / 0.35);
+    rise($('g-kick'), t, a); rise($('g1'), t, a + 0.15);
+    $('gigo-head').style.opacity = A;
+    const g = io(clamp((t - (a + 0.5)) / 1.4));
+    const N = 60, pts = [];
+    for (let i = 0; i <= N * g; i++) { const s = i / N; pts.push([560 + s * 800, 900 - 330 * (Math.exp(4.2 * s) - 1) / (Math.exp(4.2) - 1)]); }
+    $('curve').setAttribute('d', pts.length > 1 ? 'M ' + pts.map((p) => p.join(' ')).join(' L ') : '');
+    const tip = pts[pts.length - 1] || [560, 900];
+    $('tip').setAttribute('cx', tip[0]); $('tip').setAttribute('cy', tip[1]); $('tip').style.opacity = g > 0 ? 1 : 0;
+    $('chart').style.opacity = A * clamp((t - (a + 0.3)) / 0.3);
+    $('chart').style.transform = `translateY(${-40 + 0}px)`;
+    // part B (garbage in, garbage out): from a + 2.8
+    const tb = t - (a + 3.8);
+    const Bv = clamp(tb / 0.4);
+    $('gigo2').style.opacity = Bv;
+    const head2 = $('gigo2').firstElementChild; head2.style.transform = `scale(${0.94 + 0.06 * out3(clamp(tb / 0.5))})`;
+    const mach = $('machine'); const pulse = 1 + 0.04 * Math.sin(Math.max(0, tb) * 9) * clamp(tb / 0.3);
+    mach.style.transform = `scale(${back(clamp((tb - 0.2) / 0.5)) * pulse})`;
+    // junk drops in from the left, passes the box, comes out the right just as messy
+    junk.forEach((e, i) => {
+      const t0 = 0.35 + i * 0.16, u = clamp((tb - t0) / 1.25);
+      const cx = 960, cy = 685;
+      let x, y, r = (rnd(i, 1) - 0.5) * 70 + u * 220 * (rnd(i, 2) - 0.5);
+      if (u < 0.5) { const v = u / 0.5; x = 520 + v * (cx - 520 - 60) + (rnd(i, 3) - 0.5) * 120 * (1 - v); y = cy - 120 + (rnd(i, 4) - 0.5) * 160 * (1 - v) + v * 30; }
+      else { const v = (u - 0.5) / 0.5; x = cx + 60 + v * 440; y = cy + (rnd(i, 5) - 0.5) * 200 * v; }
+      const hide = Math.abs(x - cx) < 120 && u > 0.35 && u < 0.65; // inside the box
+      e.style.left = (x - 32) + 'px'; e.style.top = (y - 25) + 'px';
+      e.style.transform = `rotate(${r}deg) scale(${0.8 + 0.4 * rnd(i, 6)})`;
+      e.style.opacity = u <= 0 || u >= 1 ? 0 : hide ? 0 : Math.min(1, u * 8, (1 - u) * 8);
+    });
+    rise($('gigo-sub'), t, a + 4.9);
+  }
+
+  // ---- beat 4
+  function renderB4(t) {
+    const [a] = B.b4;
+    $('b4').style.opacity = clamp((t - a) / 0.45);
+    rise($('close').children[0], t, a); rise($('close').children[1], t, a + 0.15, 26);
+    $('not').querySelector('i').style.transform = `scaleX(${out3(clamp((t - (a + 1.2)) / 0.5))})`;
+    const s = $('sign'); rise(s, t, a + 2.3, 24);
+  }
+
+  window.render = (t) => { renderDemo(t); renderB0(t); renderB1(t); renderB2(t); renderB3(t); renderB4(t); };
+  window.render(0);
+</script>
+</body>
+</html>
